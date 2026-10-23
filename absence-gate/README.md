@@ -141,5 +141,12 @@ sentence is written, and no synonym gets around it. absence-gate stays the secon
 The asymmetry is on purpose: a dumb gate errs toward "go and look", never toward "forbidden". `BLOCK` is rare by
 design; `REVIEW` is its normal answer when the evidence is partial — and the evidence is always printed.
 
+**Neighbour.** [neverempty](https://github.com/Priyank032/neverempty) attacks the same lie from the other side: a tool
+that *failed* returns `[]`, and the agent tells the user "no results". It types the outcome (`Ok` / `Empty` / `Err`),
+renders an error to the model as an explicit "do not claim absence", and **measures** the misreport rate by injecting
+faults. absence-gate starts where that ends — the tool worked, the search was blind (ignore files, dot-folders, a
+substring, a declension) or never ran. Its author is as honest as one could ask: the number the library exists to
+produce isn't measured yet. Neither is ours (an outside reviewer's main point) — that is the next rung.
+
 **Limits.** It checks presence of tokens, not meaning. It will not catch "I don't remember how this works" (no
 fact-shaped token), and it can be fooled by a claim that names no carrier. It's a floor, not a judge.
