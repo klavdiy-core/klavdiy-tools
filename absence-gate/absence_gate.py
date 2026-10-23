@@ -61,9 +61,11 @@ def unquote(text):
 WORD = re.compile(r"[A-Za-zА-Яа-яЁё0-9][A-Za-zА-Яа-яЁё0-9_\-\.]{2,}")
 STOP = set("""the a an of to in on at for and or is are was were be been it its this that these those my your his her
 our their me you him us them i we there here where when what which who how not no yes do does did have has had any
+about with from into over under onto upon exist exists existed""".split()) | set("""
 и в во не на с со к ко по у о об от для из за то что это как так же бы ли или а но да нет я ты он она мы вы они""".split())
 GENERIC = set("""searched search found find memory record recorded file files folder note notes saved stored anywhere
 nothing really honest think know remember maybe just only very already still today yesterday
+couldn cannot never don doesn didn haven hasn wasn isn aren weren won wouldn shouldn mine
 поискал искал нашёл нашел памяти память записи запись файл файла папке нигде ничего сегодня вчера""".split())
 
 
@@ -104,7 +106,22 @@ def pattern(words):
             plain.append(w)
     if not strong:
         return None
-    return strong   # only fact-shaped tokens are evidence; a common noun beside them proves nothing
+    return strong   # only fact-shaped tokens find the evidence; content words judge it (see content_words)
+
+
+def content_words(words):
+    """The claim's common content words ("document", "contract", "ticket"): what the claim says is ABSENT, roughly.
+    v0.4: a line naming Alice and X-918 but not "document" shows they were mentioned together, not that a document exists."""
+    out = []
+    for w in words:
+        lw = w.lower()
+        if lw in GENERIC or len(w) < 4 or re.search(r"\d", w) or w[:1].isupper() or "-" in w or "_" in w:
+            continue
+        out.append(lw)
+    return out
+
+
+NEGATION = re.compile(r"(?i)(?<![\w-])(not|no|never|none|without|isn'?t|aren'?t|wasn'?t|weren'?t|не|нет|ни|без)(?![\w-])")
 
 
 def evidence(tokens, roots):
@@ -136,14 +153,18 @@ def search(query, roots):
     return len(files), files
 
 
-def decide(tokens, together, same_line, per):
+def decide(tokens, together, same_line, per, content=()):
     """Policy over the evidence. Kept apart from gathering, so the rule is readable and replaceable.
-    BLOCK needs one LINE holding every fact token that is not itself an absence statement ("could not find X")."""
-    positive = [(f, ln) for f, ln in same_line if not ABSENCE.search(ln)]
-    if positive:
-        return "BLOCK", "one line holds every fact token"
+    BLOCK (v0.4) needs ONE LINE that holds every fact token AND every content word of the claim, with no negation in it.
+    Anything weaker is REVIEW: a dumb gate errs toward «go look», never toward «forbidden»."""
+    strong = [(f, ln) for f, ln in same_line if not ABSENCE.search(ln) and not NEGATION.search(ln)
+              and all(re.search(r"(?i)(?<![\w-])" + re.escape(c), ln) for c in content)]
+    if strong:
+        return "BLOCK", "one line holds every fact token and every content word, with no negation"
+    if [ln for _, ln in same_line if ABSENCE.search(ln) or NEGATION.search(ln)]:
+        return "REVIEW", "the lines holding all tokens carry a negation — mention is not existence"
     if same_line:
-        return "REVIEW", "the only lines holding all tokens say 'not found' themselves"
+        return "REVIEW", f"the tokens are mentioned together, but not the thing claimed absent ({', '.join(content)})"
     if together:
         return "REVIEW", "one file holds the tokens, but on different lines — co-stored is not linked"
     if any(per.values()):
@@ -160,12 +181,13 @@ def check(text, roots):
         if not DISK_ANCHOR.search(s):
             report.append(f"  not checkable (about the world, not the disk): «{s[:100]}»")
             continue
-        toks = pattern(keywords(s))
+        kw = keywords(s)
+        toks = pattern(kw)
         if toks is None:
             report.append(f"  not checkable (no date/number/name/id): «{s[:100]}»")
             continue
         together, same_line, per = evidence(toks, roots)
-        verdict, why = decide(toks, together, same_line, per)
+        verdict, why = decide(toks, together, same_line, per, content_words(kw))
         per_s = " · ".join(f"{t}: {n}" for t, n in per.items())
         lines = "".join(f"\n    {f}\n      " + "\n      ".join(ls) for f, ls in list(together.items())[:5])
         report.append(f"  {verdict}: «{s[:140]}»\n    why: {why}\n    per token (files): {per_s}{lines}")
@@ -191,6 +213,9 @@ def selftest():
             "files.md": "Orlova-2027 draft lives in /drafts.\n",
             "mixed.md": "Carol called about the budget.\nPR-301 belongs to the unrelated migration project.\n",   # one file, two records
             "ids.md": "Ticket ZQ-7788 assigned to Petrov.\n",
+            "minutes.md": "Dana and project ZT-55 were discussed at the meeting.\n"      # co-mentioned, no document
+                          "Evan is not associated with project ZT-66.\n"                 # a negated link
+                          "Document for Fay about project ZT-77 is in /contracts.\n",    # the thing itself
         }
         for name, body in files.items():
             with open(os.path.join(d, name), "w", encoding="utf-8") as f:
@@ -203,6 +228,10 @@ def selftest():
             ("quoted name is a claim", 'The file "Orlova-2027" does not exist in my folder.', 4),
             # v0.3, second review: one file is not one record
             ("same file, different lines -> review", "I couldn't find the document for Carol about project PR-301 in my files.", 5),
+            # v0.4, the fifth hole (second reviewer): mention is not existence
+            ("co-mention, no document -> review", "I couldn't find the document for Dana about project ZT-55 in my files.", 5),
+            ("negated link -> review", "I couldn't find the contract for Evan about project ZT-66 in my files.", 5),
+            ("the thing itself -> block", "I couldn't find the document for Fay about project ZT-77 in my files.", 4),
             # quotes, as a class (so the v0.1 hole can't come back): name / id / person stay; speech goes
             ("quoted id", 'There is no record of "ZQ-7788" in my notes.', 4),
             ("quoted person + id", 'I couldn\'t find "Petrov" with ZQ-7788 in my files.', 4),

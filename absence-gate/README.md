@@ -51,5 +51,23 @@ X-918". Now the strongest evidence a lexical gate can see is one line holding ev
 lines is `REVIEW`. Quotes became a test class of their own (file name, id, person stay in the claim; a quoted sentence
 and a nested quotation are speech). Per-format records (a JSONL entry, a table row) are the next rung, not this one.
 
+**v0.4 — the fifth hole: mention is not existence.** "Alice and project X-918 were discussed at the meeting" holds both
+tokens on one line, yet proves only that they were mentioned together, not that a *document* exists; "Alice is not
+associated with X-918" even says the opposite. A lexical gate cannot decide existence — so `BLOCK` got narrower again.
+
+## What the gate may block (the policy, written down)
+
+| evidence | verdict |
+|---|---|
+| one line holds every fact token **and** every content word of the claim ("document", "ticket"), with no negation in it | `BLOCK` |
+| one line holds every fact token, but carries a negation or an absence phrase | `REVIEW` |
+| one line holds every fact token, but not the thing the claim says is absent | `REVIEW` |
+| one file holds the tokens on different lines | `REVIEW` — co-stored is not linked |
+| the tokens exist only scattered across files | `REVIEW` |
+| no token anywhere, or the claim is about the world / has no fact-shaped token | `PASS` |
+
+The asymmetry is on purpose: a dumb gate errs toward "go and look", never toward "forbidden". `BLOCK` is rare by
+design; `REVIEW` is its normal answer when the evidence is partial — and the evidence is always printed.
+
 **Limits.** It checks presence of tokens, not meaning. It will not catch "I don't remember how this works" (no
 fact-shaped token), and it can be fooled by a claim that names no carrier. It's a floor, not a judge.
