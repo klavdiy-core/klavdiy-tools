@@ -59,6 +59,14 @@ associated with X-918" even says the opposite. A lexical gate cannot decide exis
 thing but don't say it exists *now*. A short, deliberately narrow list of markers sends such lines to `REVIEW`. In the
 reviewer's words: not "become smarter" — "define more precisely when you have the right to be sure".
 
+**What it is, and what it is not.** The gate has learned to *cut off* several known kinds of evidence that do not
+support "the thing exists now" (a token alone, co-storage, co-mention, negation, future/possibility/ended past). It has
+**not** learned to *prove* existence: "The document for Alice about X-918 exists" can be false, and "was created yesterday
+and remains in /contracts" describes a real file yet goes to `REVIEW` because of its tense — a known false `REVIEW`, pinned
+as a self-test so it stays visible. The next rung is not better negation detection; it is **calibrating the gate's
+authority**: which claims it may block at all, and on what evidence. Self-test N/N means the lessons written so far are
+not forgotten — not that the gate is reliable.
+
 ## What the gate may block (the policy, written down)
 
 | evidence | verdict |
