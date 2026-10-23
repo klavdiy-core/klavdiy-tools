@@ -8,8 +8,16 @@ point of action does. This gate sits in the send path: it reads the outgoing tex
 and exits 4 if the disk contradicts the claim. The agent then has to open the files and rewrite — not argue.
 
 Usage:
-  python absence_gate.py <textfile> --root DIR [--root DIR ...]   exit 0 pass · 4 contradicted · 2 usage
+  python absence_gate.py <textfile> --root DIR [--root DIR ...]   exit 0 pass · 4 BLOCK · 5 REVIEW · 2 usage
   python absence_gate.py --selftest                                planted red + negative control, in a temp dir
+
+v0.2 (after an outside review, 23.10.2026): evidence gathering is separated from the decision.
+  evidence: per claim — which files hold ALL of its fact tokens together, and the matching lines themselves;
+  policy:   BLOCK  — one file holds every fact token, and its matching line is not itself an absence statement;
+            REVIEW — tokens exist but only scattered across files, or the only matching lines say "not found"
+                     themselves (a lexical gate can't tell "ZX-4417 exists" from "I could not find ZX-4417");
+            PASS   — no token anywhere, or the claim is not about the disk / has no fact-shaped token.
+  A token merely existing somewhere is not proof that the thing claimed absent exists.
 
 Requires ripgrep (`rg`) on PATH. Searches with --no-ignore and case-insensitive on purpose: .gitignore silently hides
 files from a default search, and a silent zero reads exactly like a real one.
@@ -40,7 +48,16 @@ DISK_ANCHOR = re.compile(
     r"[\\/][\w.\-]+|\.(md|txt|json|py|ps1|jsonl|csv|pdf|png|jpg)\b|"
     r"файл|папк|архив|запис|заметк|журнал|памят|индекс|сохран|нашёл|нашел|искал|поиск|диск", re.I)
 
-QUOTED = re.compile(r"«[^«»\n]{0,300}»|“[^“”\n]{0,300}”|\"[^\"\n]{1,300}\"")   # someone's words, not my claim
+# Quoted SPEECH (several words) is someone's words, not my claim — blanked. A quoted single token is a NAME
+# (a file, an id: «The file "Orlova-2027" doesn't exist») and stays part of the claim (v0.1 let it escape).
+QUOTED = re.compile(r"«([^«»\n]{0,300})»|“([^“”\n]{0,300})”|\"([^\"\n]{1,300})\"")
+
+
+def unquote(text):
+    def repl(m):
+        inner = next(g for g in m.groups() if g is not None)
+        return inner if not re.search(r"\s", inner.strip()) else " "
+    return QUOTED.sub(repl, text)
 WORD = re.compile(r"[A-Za-zА-Яа-яЁё0-9][A-Za-zА-Яа-яЁё0-9_\-\.]{2,}")
 STOP = set("""the a an of to in on at for and or is are was were be been it its this that these those my your his her
 our their me you him us them i we there here where when what which who how not no yes do does did have has had any
@@ -87,7 +104,22 @@ def pattern(words):
             plain.append(w)
     if not strong:
         return None
-    return "|".join(strong + ([re.escape(max(plain, key=len))] if plain else []))
+    return strong   # only fact-shaped tokens are evidence; a common noun beside them proves nothing
+
+
+def evidence(tokens, roots):
+    """Files that hold ALL tokens, and per such file the lines that hold any token. Plus per-token file counts.
+    Returns (together: {file: [line, ...]}, per_token: {token: count})."""
+    per = {t: search(t, roots)[0] for t in tokens}
+    together = {}
+    for f in search(tokens[0], roots)[1]:
+        try:
+            text = open(f, encoding="utf-8", errors="replace").read()
+        except OSError:
+            continue
+        if all(re.search(t, text, re.I) for t in tokens[1:]):
+            together[f] = [ln.strip() for ln in text.splitlines() if any(re.search(t, ln, re.I) for t in tokens)][:5]
+    return together, per
 
 
 def search(query, roots):
@@ -100,30 +132,41 @@ def search(query, roots):
     return len(files), files
 
 
+def decide(tokens, together, per):
+    """Policy over the evidence. Kept apart from gathering, so the rule is readable and replaceable."""
+    if together:
+        if all(ABSENCE.search(ln) for lines in together.values() for ln in lines):
+            return "REVIEW", "the only lines holding the tokens say 'not found' themselves"
+        return "BLOCK", "one file holds every fact token"
+    if any(per.values()):
+        return "REVIEW", "tokens exist, but never together in one file"
+    return "PASS", "no token anywhere"
+
+
 def check(text, roots):
-    claims = [s for s in sentences(QUOTED.sub(" ", text)) if ABSENCE.search(s)]
+    claims = [s for s in sentences(unquote(text)) if ABSENCE.search(s)]
     if not claims:
         return 0, "ABSENCE_GATE_OK: no absence claim"
-    report, blocked = [], False
+    report, worst = [], "PASS"
     for s in claims:
         if not DISK_ANCHOR.search(s):
             report.append(f"  not checkable (about the world, not the disk): «{s[:100]}»")
             continue
-        q = pattern(keywords(s))
-        if q is None:
+        toks = pattern(keywords(s))
+        if toks is None:
             report.append(f"  not checkable (no date/number/name/id): «{s[:100]}»")
             continue
-        n, files = search(q, roots)
-        if n:
-            blocked = True
-            # a merged pattern is not a measurement: say WHICH token hit
-            per = " · ".join(f"{t}: {search(t, roots)[0]}" for t in q.split("|")[:6]) if "|" in q else ""
-            report.append(f"  CONTRADICTED: «{s[:140]}»\n    query: {q}\n    files: {n}" +
-                          (f"\n    per token: {per}" if per else "") + "\n    " + "\n    ".join(files[:10]))
-        else:
-            report.append(f"  holds (0 hits): «{s[:100]}»  query: {q}")
-    if blocked:
+        together, per = evidence(toks, roots)
+        verdict, why = decide(toks, together, per)
+        per_s = " · ".join(f"{t}: {n}" for t, n in per.items())
+        lines = "".join(f"\n    {f}\n      " + "\n      ".join(ls) for f, ls in list(together.items())[:5])
+        report.append(f"  {verdict}: «{s[:140]}»\n    why: {why}\n    per token (files): {per_s}{lines}")
+        if verdict == "BLOCK" or (verdict == "REVIEW" and worst == "PASS"):
+            worst = verdict
+    if worst == "BLOCK":
         return 4, "ABSENCE_CLAIM_CONTRADICTED — the disk has what the text says is absent. Open the files, rewrite.\n" + "\n".join(report)
+    if worst == "REVIEW":
+        return 5, "ABSENCE_CLAIM_REVIEW — evidence is partial; a person (or the agent, by opening the files) decides.\n" + "\n".join(report)
     return 0, f"ABSENCE_GATE_OK: {len(claims)} claim(s), none contradicted\n" + "\n".join(report)
 
 
@@ -131,9 +174,23 @@ def selftest():
     import secrets
     ok = True
     with tempfile.TemporaryDirectory() as d:
-        with open(os.path.join(d, "notes.md"), "w", encoding="utf-8") as f:
-            f.write("Meeting with Orlova moved to 14.03.2027, ticket ZX-4417.\n")
+        files = {
+            "notes.md": "Meeting with Orlova moved to 14.03.2027, ticket ZX-4417.\n",
+            "people.md": "Alice called about the budget.\n",                   # Alice here …
+            "projects.md": "Spec for X-918 is in review.\n",                   # … X-918 elsewhere
+            "contracts.md": "Signed: Bob, project QB-77, 02.02.2027.\n",       # both, one file
+            "log.md": "I could not find ticket TK-5150 anywhere.\n",           # the token, in an absence line
+            "files.md": "Orlova-2027 draft lives in /drafts.\n",
+        }
+        for name, body in files.items():
+            with open(os.path.join(d, name), "w", encoding="utf-8") as f:
+                f.write(body)
         cases = [
+            # v0.2, from an outside review — each of these answered wrongly in v0.1
+            ("scattered tokens -> review, not block", "I couldn't find the document for Alice about project X-918 in my files.", 5),
+            ("same file -> block", "I couldn't find any record of Bob and QB-77 in my files.", 4),
+            ("only an absence line -> review", "Ticket TK-5150 was never saved in my files.", 5),
+            ("quoted name is a claim", 'The file "Orlova-2027" does not exist in my folder.', 4),
             ("planted red", "I searched my notes for the Orlova meeting on 14.03.2027 and there is no record anywhere.", 4),
             ("synonym still red", "Ticket ZX-4417 was never saved in my files.", 4),
             ("negative control", f"There is no record of {'q' + secrets.token_hex(6)} in my files.", 0),  # generated: can't find itself
