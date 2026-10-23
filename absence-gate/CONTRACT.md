@@ -51,8 +51,20 @@ runnable side by side, so a change of policy is a diff of verdicts on a fixed ev
 | false REVIEW | one extra look | whoever opens the files |
 | false ALLOW | the original failure: "I don't have it" while the disk has it | the person who believed it |
 
-A deployment picks a **cost profile**: e.g. `strict` (rows 1-2 BLOCK) for an agent that must never deny memory,
-`gentle` (row 1 only) for a chat. The profile selects a policy; it never edits evidence.
+A deployment picks a **cost profile**. ~~A profile selects which rows BLOCK~~ — that was wrong in the first draft
+(caught by the reviewer): making rule 2 (a line with a negation) BLOCK under a "strict" profile turns weak evidence into
+strong, which this contract itself forbids. Two decisions are kept apart:
+
+- **verdict** — BLOCK / REVIEW / ALLOW — comes from evidence and policy only, the same in every deployment;
+- **action** — `send` / `hold for a look` / `stop` — is what a deployment does with a verdict; this is where cost lives.
+
+| profile | BLOCK | REVIEW | ALLOW |
+|---|---|---|---|
+| `strict` (an agent that must never deny memory) | stop | hold for a look | send |
+| `gentle` (a chat) | stop | send, with the evidence attached | send |
+
+A held REVIEW is reported as **"held by cost, not by evidence"** — the verdict stays REVIEW. Cost may move the action
+threshold; it may never pretend to be evidence.
 
 ## What each layer has no right to decide
 
@@ -79,3 +91,16 @@ correctable**.
 3. **Known costs stay pinned.** Every accepted false verdict (e.g. "was created yesterday and remains" -> REVIEW) is a
    test in the evidence corpus; a policy change that flips it must show up as a verdict diff, not pass silently.
 4. **Adding a marker is not a policy change.** A new evidence label alone flips zero verdicts in the corpus.
+5. **Cost never changes a verdict.** For one evidence record, every profile reports the same verdict; only the action differs.
+
+Each check counts only if it can catch a planted violation: a policy that opens a file must fail check 2; a profile
+that rewrites a verdict must fail check 5; a marker that silently flips a verdict must fail check 4. A green check that
+was never red is evidence, not absolution.
+
+## Blind corpus (held-out examples the author never saw)
+
+1. The corpus author writes each case — claim, files, **expected verdict and a short reason** — before the gate runs.
+2. Mismatches between expected and actual are published as they are, not smoothed.
+3. After results are revealed, cases are not edited in place; a correction is a separate change with its reason.
+4. The corpus holds expected `REVIEW` and `ALLOW` cases too, not only `BLOCK` — otherwise a gate that blocks everything
+   would look perfect.
