@@ -66,6 +66,13 @@ strong, which this contract itself forbids. Two decisions are kept apart:
 A held REVIEW is reported as **"held by cost, not by evidence"** — the verdict stays REVIEW. Cost may move the action
 threshold; it may never pretend to be evidence.
 
+**Releasing a hold** (the reviewer: transparent about why it stopped must also mean transparent about how it may go on).
+A hold is released only by one of:
+1. **new evidence** — the claim is rewritten or the files change, the gate runs again, and the new verdict is ALLOW;
+2. **a recorded decision** — a person (or the agent, after opening the cited files) releases it with a one-line reason
+   that is stored next to the hold.
+Switching the cost profile does **not** release a hold already placed; a release with no reason is not a release.
+
 ## What each layer has no right to decide
 
 | layer | may | may NOT |
@@ -93,9 +100,19 @@ correctable**.
 4. **Adding a marker is not a policy change.** A new evidence label alone flips zero verdicts in the corpus.
 5. **Cost never changes a verdict.** For one evidence record, every profile reports the same verdict; only the action differs.
 
-Each check counts only if it can catch a planted violation: a policy that opens a file must fail check 2; a profile
-that rewrites a verdict must fail check 5; a marker that silently flips a verdict must fail check 4. A green check that
-was never red is evidence, not absolution.
+Each check counts only if it can catch a planted violation **in the very layer it guards** — its own failure mode,
+not any breakage of the harness:
+
+| check | planted violation it must catch |
+|---|---|
+| 1 evidence stable | evidence that reads the active policy and drops a line |
+| 2 policy pure | a policy that opens a file |
+| 3 known costs pinned | a policy edit that flips the pinned false REVIEW to BLOCK |
+| 4 marker ≠ policy | a new label that silently flips a verdict |
+| 5 cost ≠ verdict | a profile that rewrites REVIEW into BLOCK |
+
+A green check that was never red is evidence, not absolution. An outsider should be able to plant the violation,
+see which invariant broke, and see why the check caught it.
 
 ## Blind corpus (held-out examples the author never saw)
 
