@@ -19,10 +19,12 @@ v0.2 (after an outside review, 23.10.2026): evidence gathering is separated from
             PASS   — no token anywhere, or the claim is not about the disk / has no fact-shaped token.
   A token merely existing somewhere is not proof that the thing claimed absent exists.
 
-Requires ripgrep (`rg`) on PATH. Searches with --no-ignore and case-insensitive on purpose: .gitignore silently hides
-files from a default search, and a silent zero reads exactly like a real one.
+Requires ripgrep (`rg`) on PATH, built with PCRE2. Searches with -uu (no ignore files, hidden folders too), whole words,
+case-insensitive on purpose: .gitignore and dot-folders silently hide files from a default search, and a silent zero
+reads exactly like a real one.
 
-Wire it into whatever sends: a Claude Code PreToolUse hook, a chat bot's send function, a commit-msg hook.
+Wire it into whatever sends. In Claude Code use claude_code_hook.py (Claude Code blocks only on exit 2 — v0.6);
+elsewhere — a chat bot's send function, a commit-msg hook — call this directly.
 Fail-closed: any hit blocks. False blocks are fixed in the gate (with a regression test), never by a skip flag.
 """
 import re
@@ -34,11 +36,13 @@ import os
 # --- what counts as a claim of absence (EN + RU). Broad on purpose: a false positive costs one search,
 # a false negative costs a lie. A list of phrasings is blind to synonyms it lacks — add the new ones as tests.
 ABSENCE = re.compile(
-    r"(couldn'?t find|could not find|can'?t find|not found|no (record|entry|file|note|mention)s?\b|"
-    r"nothing (recorded|found|saved|anywhere)|there is nothing|never (saved|recorded|written)|"
-    r"not (saved|recorded|written down|stored)|doesn'?t exist|does not exist|i don'?t have|no such|"
-    r"нигде не (запис|найд|встреч|сохран)|не сохран(ил|ён|ен|ены|ено)|не найден|не нашёл|не нашел|ничего нет|"
-    r"нет нигде|нет записи|не записан|не существует|у меня (этого )?нет)",
+    r"(couldn'?t find|could not find|can'?t find|didn'?t find|did not find|haven'?t found|have not found|not found|"
+    r"found nothing|no (record|entry|file|note|mention|trace)s?\b|missing|"
+    r"nothing (recorded|found|saved|anywhere)|there is nothing|there'?s nothing|never (saved|recorded|written)|"
+    r"not (saved|recorded|written down|stored)|isn'?t (saved|recorded|stored|written)|doesn'?t exist|does not exist|"
+    r"i don'?t have|no such|"
+    r"нигде не (запис|найд|встреч|сохран)|не сохран(ил|ён|ен|ены|ено)|не найден|не нашёл|не нашел|не нашл(а|и)|"
+    r"ничего нет|нет нигде|нет записи|нет такого|не записан|не существует|отсутству\w*|у меня (этого )?нет)",
     re.I)
 
 # --- a claim is checkable by the disk only if it is ABOUT the disk (names a carrier). "The meeting doesn't exist
@@ -58,7 +62,8 @@ def unquote(text):
         inner = next(g for g in m.groups() if g is not None)
         return inner if not re.search(r"\s", inner.strip()) else " "
     return QUOTED.sub(repl, text)
-WORD = re.compile(r"[A-Za-zА-Яа-яЁё0-9][A-Za-zА-Яа-яЁё0-9_\-\.]{2,}")
+# v0.6: two-character ids («Q3», «7B») were dropped by the 3+ rule.
+WORD = re.compile(r"[A-Za-zА-Яа-яЁё0-9][A-Za-zА-Яа-яЁё0-9_\-\.]{2,}|(?<![\w-])(?:[A-Za-z]\d|\d[A-Za-z])(?![\w-])")
 STOP = set("""the a an of to in on at for and or is are was were be been it its this that these those my your his her
 our their me you him us them i we there here where when what which who how not no yes do does did have has had any
 about with from into over under onto upon exist exists existed""".split()) | set("""
@@ -78,7 +83,8 @@ def keywords(sentence):
     m = re.match(r"^[«\"'(\[_*]*([A-Za-zА-Яа-яЁё][\wЁё\-\.]*)", sentence)
     if m:
         w0 = m.group(1)
-        if not (w0.isupper() or re.search(r"\d", w0)):
+        possessive = re.match(r"['’]s\b", sentence[m.end(1):])      # v0.6: «Petrov's contract…» — a name, not grammar
+        if not (w0.isupper() or re.search(r"\d", w0) or possessive):
             sentence = sentence[:m.start(1)] + w0[:1].lower() + w0[1:] + sentence[m.end(1):]
     out, seen = [], set()
     for w in (x.strip(".-_") for x in WORD.findall(sentence)):
@@ -101,12 +107,30 @@ def pattern(words):
         if w.isupper() and len(w) > 6 and not re.search(r"\d", w):
             plain.append(w.lower())
         elif re.search(r"\d", w) or w[:1].isupper() or is_id:
-            strong.append(re.escape(w))
+            strong.append(w)
         elif len(w) >= 4:
             plain.append(w)
     if not strong:
         return None
     return strong   # only fact-shaped tokens find the evidence; content words judge it (see content_words)
+
+
+CYR = re.compile(r"^[А-Яа-яЁё]+$")
+
+
+def tok_re(t):
+    """v0.6 (outside review #3): a token is a WORD, not a substring — «Ivo» is not in «pivot», «ZT-55» not in «ZT-550».
+    Same boundaries on both sides (rg -P and Python), so the two can't disagree. Russian names decline: «Орлову» must find
+    «Орлова» — a crude stem (drop the ending, allow up to 3 letters back). A false hit costs one look; a false PASS, a lie."""
+    if CYR.match(t) and len(t) >= 5:
+        core = re.escape(t[:-2] if len(t) >= 6 else t[:-1]) + r"\w{0,3}"
+    else:
+        core = re.escape(t)
+    return r"(?<![\w-])" + core + r"(?![\w-])"
+
+
+def has_digit_or_id(t):
+    return bool(re.search(r"\d", t)) or (("-" in t or "_" in t) and t.replace("-", "").replace("_", "").isupper())
 
 
 def content_words(words):
@@ -135,22 +159,30 @@ def evidence(tokens, roots):
       together  — files that hold all tokens, with the lines that hold any of them;
       same_line — lines that hold ALL tokens at once: the strongest lexical link a gate can see.
     Returns (together: {file: [line, ...]}, same_line: [(file, line), ...], per_token: {token: count})."""
-    per = {t: search(t, roots)[0] for t in tokens}
+    res = [tok_re(t) for t in tokens]
+    per = {t: search(r, roots)[0] for t, r in zip(tokens, res)}
     together, same_line = {}, []
-    for f in search(tokens[0], roots)[1]:
+    for f in search(res[0], roots)[1]:
         try:
             text = open(f, encoding="utf-8", errors="replace").read()
         except OSError:
             continue
-        if all(re.search(t, text, re.I) for t in tokens[1:]):
-            together[f] = [ln.strip() for ln in text.splitlines() if any(re.search(t, ln, re.I) for t in tokens)][:5]
-            same_line += [(f, ln.strip()) for ln in text.splitlines() if all(re.search(t, ln, re.I) for t in tokens)]
-    return together, same_line, per
+        if all(re.search(r, text, re.I) for r in res[1:]):
+            lines = text.splitlines()
+            together[f] = [(i + 1, ln.strip()) for i, ln in enumerate(lines) if any(re.search(r, ln, re.I) for r in res)][:5]
+            same_line += [(f, i + 1, ln.strip()) for i, ln in enumerate(lines) if all(re.search(r, ln, re.I) for r in res)]
+    # v0.6 (outside review #1): the NAME of a file is evidence too. «I don't have budget-2027.xlsx» with that file in the
+    # root used to PASS — a binary file has no line to match, and nothing else on disk spells its name.
+    paths = [p for p in list_files(roots) if all(re.search(r, p, re.I) for r in res)]
+    return together, same_line, per, paths
+
+
+RG = ["rg", "-uu", "-P"]   # v0.6 (outside review #2): --no-ignore alone still skips dot-dirs (.claude/, .obsidian/) — -uu
 
 
 def search(query, roots):
-    """ripgrep, --no-ignore, case-insensitive, files-with-matches. Returns (count, files)."""
-    p = subprocess.run(["rg", "--no-ignore", "-i", "-l", "-e", query, *roots],
+    """ripgrep: no ignore files, hidden files too, PCRE2 (for word boundaries), case-insensitive. Returns (count, files)."""
+    p = subprocess.run([*RG, "-i", "-l", "-e", query, *roots],
                        capture_output=True, text=True, encoding="utf-8", errors="replace")
     if p.returncode not in (0, 1):
         raise RuntimeError("search failed: " + p.stderr.strip()[:200])   # a broken search must not read as zero
@@ -158,17 +190,43 @@ def search(query, roots):
     return len(files), files
 
 
-def decide(tokens, together, same_line, per, content=()):
+def list_files(roots):
+    """Every file path under the roots, relative to its root (so a token can't match the root's own folder name)."""
+    out = []
+    for root in roots:
+        p = subprocess.run(["rg", "--files", "-uu", root], capture_output=True, text=True, encoding="utf-8", errors="replace")
+        if p.returncode not in (0, 1):
+            raise RuntimeError("file listing failed: " + p.stderr.strip()[:200])
+        out += [os.path.relpath(l, root) for l in p.stdout.splitlines() if l.strip()]
+    return out
+
+
+def decide(tokens, together, same_line, per, content=(), paths=(), names_file=False):
     """Policy over the evidence. Kept apart from gathering, so the rule is readable and replaceable.
     BLOCK (v0.4) needs ONE LINE that holds every fact token AND every content word of the claim, with no negation in it.
-    Anything weaker is REVIEW: a dumb gate errs toward «go look», never toward «forbidden»."""
-    strong = [(f, ln) for f, ln in same_line if not ABSENCE.search(ln) and not NEGATION.search(ln)
-              and not MODALITY.search(ln) and all(re.search(r"(?i)(?<![\w-])" + re.escape(c), ln) for c in content)]
-    if strong:
+    Anything weaker is REVIEW: a dumb gate errs toward «go look», never toward «forbidden».
+    v0.6: a file whose path holds every token, when the claim is about a file, is BLOCK too; a clean line next to a
+    negated or ended one is a CONFLICT -> REVIEW; and a capitalised word alone («Python», «March») never convicts — BLOCK
+    needs at least one token with a digit or an id shape."""
+    def clean(ln):
+        return (not ABSENCE.search(ln) and not NEGATION.search(ln) and not MODALITY.search(ln)
+                and all(re.search(r"(?i)(?<![\w-])" + re.escape(c), ln) for c in content))
+    convicting = any(has_digit_or_id(t) for t in tokens)
+    plain = [x for x in same_line if clean(x[2])]
+    dirty = [x for x in same_line if ABSENCE.search(x[2]) or NEGATION.search(x[2]) or MODALITY.search(x[2])]
+    if paths and names_file and convicting:
+        return "BLOCK", f"a file whose path holds every fact token exists: {paths[0]}"
+    if plain and dirty:
+        return "REVIEW", "evidence conflicts: a plain line says it exists, another line negates it or says it ended"
+    if plain and convicting:
         return "BLOCK", "one line holds every fact token and every content word, plain present, no negation"
-    if [ln for _, ln in same_line if ABSENCE.search(ln) or NEGATION.search(ln)]:
+    if plain:
+        return "REVIEW", "a plain line matches, but only on capitalised words — a name alone doesn't convict"
+    if paths:
+        return "REVIEW", f"a path holds every fact token: {paths[0]}"
+    if [x for x in same_line if ABSENCE.search(x[2]) or NEGATION.search(x[2])]:
         return "REVIEW", "the lines holding all tokens carry a negation — mention is not existence"
-    if [ln for _, ln in same_line if MODALITY.search(ln)]:
+    if [x for x in same_line if MODALITY.search(x[2])]:
         return "REVIEW", "the lines holding all tokens speak of future, possibility or a past that ended — not 'exists now'"
     if same_line:
         return "REVIEW", f"the tokens are mentioned together, but not the thing claimed absent ({', '.join(content)})"
@@ -179,27 +237,40 @@ def decide(tokens, together, same_line, per, content=()):
     return "PASS", "no token anywhere"
 
 
+NAMES_FILE = re.compile(r"(?i)file|файл|\.[a-z][a-z0-9]{1,4}\b")   # «.xlsx» names a file; «14.03.2027» does not
+
+
 def check(text, roots):
-    claims = [s for s in sentences(unquote(text)) if ABSENCE.search(s)]
+    sents = sentences(unquote(text))
+    claims = [(i, s) for i, s in enumerate(sents) if ABSENCE.search(s)]
     if not claims:
         # blind run 1: ALLOW on a positive claim meant «not looked at», and read like «checked and fine». Two states now.
         return 0, "ABSENCE_GATE_NOT_APPLICABLE: no absence claim — this text was not evaluated (ALLOW is not 'true')"
     report, worst, checked = [], "PASS", 0
-    for s in claims:
-        if not DISK_ANCHOR.search(s):
+    for i, s in claims:
+        # v0.6: «Searched my notes for Orlova. Nothing found.» — the facts sit one or two sentences back.
+        ctx = " ".join(sents[max(0, i - 2):i + 1])
+        if not DISK_ANCHOR.search(ctx):
             report.append(f"  not checkable (about the world, not the disk): «{s[:100]}»")
             continue
         kw = keywords(s)
         toks = pattern(kw)
+        if toks is None and i > 0:
+            kw = [w for p in sents[max(0, i - 2):i] for w in keywords(p)] + kw
+            toks = pattern(kw)
         if toks is None:
             report.append(f"  not checkable (no date/number/name/id): «{s[:100]}»")
             continue
         checked += 1
-        together, same_line, per = evidence(toks, roots)
-        verdict, why = decide(toks, together, same_line, per, content_words(kw))
+        together, same_line, per, paths = evidence(toks, roots)
+        verdict, why = decide(toks, together, same_line, per, content_words(kw), paths, bool(NAMES_FILE.search(ctx)))
         per_s = " · ".join(f"{t}: {n}" for t, n in per.items())
-        lines = "".join(f"\n    {f}\n      " + "\n      ".join(ls) for f, ls in list(together.items())[:5])
-        report.append(f"  {verdict}: «{s[:140]}»\n    why: {why}\n    per token (files): {per_s}{lines}")
+        # the deciding lines first (all tokens on one line), with line numbers; then paths; then what shares a file
+        decisive = "".join(f"\n    {f}:{n}: {ln}" for f, n, ln in same_line[:5])
+        path_s = "".join(f"\n    path: {p}" for p in paths[:5])
+        rest = "".join(f"\n    {f}" + "".join(f"\n      {n}: {ln}" for n, ln in ls)
+                       for f, ls in list(together.items())[:5] if f not in {x[0] for x in same_line[:5]})
+        report.append(f"  {verdict}: «{s[:140]}»\n    why: {why}\n    per token (files): {per_s}{decisive}{path_s}{rest}")
         if verdict == "BLOCK" or (verdict == "REVIEW" and worst == "PASS"):
             worst = verdict
     if worst == "BLOCK":
@@ -212,10 +283,45 @@ def check(text, roots):
     return 0, f"ABSENCE_GATE_OK: {checked} claim(s) checked against the disk, none contradicted\n" + "\n".join(report)
 
 
+# v0.6, outside review #3 (Fable 5.1, 23.10.2026). Module-level, so an older version of check() can be run against the
+# same fixture to prove each new case is RED on it (tests/red_on_previous.py).
+FIXTURE_V06 = {
+    "budget-2027.xlsx": b"PK\x03\x04\x00binary",                                   # a binary file: its name is the only evidence
+    ".memory/secret.md": "Ticket HD-3030 assigned to Kim.\n",                         # a dot-dir — where agent memory lives
+    "cola.md": "Cola sales went up.\n",                                               # «Ola» is a substring here, not a word
+    "ru.md": "Договор с Сидоровой RT-7 лежит в /contracts.\n",                        # Russian declension
+    "q.md": "Report Q3 lives in /reports.\n",                                         # a two-character id
+    "kai.md": "Document for Kai about project ZT-90 is in /contracts.\n"
+              "Document for Kai about project ZT-90 was deleted.\n",                  # conflicting evidence
+}
+CASES_V06 = [
+    ("#1 file name is evidence", "I don't have the file budget-2027.xlsx in my folder.", 4),
+    ("#2 dot-dirs are searched", "There is no record of HD-3030 in my files.", 4),
+    ("#3 a word, not a substring", "There is no note about Ola in my files.", 0),
+    ("#3 near id is not the id", "I couldn't find ticket ZT-5 in my files.", 0),
+    ("#3 Russian declension", "Не нашёл договор с Сидоровым RT-7 в памяти.", 4),
+    ("facts one sentence back", "I searched my notes for ticket ZX-4417. Nothing found.", 4),
+    ("possessive name at the start", "Petrov's ticket is not saved anywhere.", 5),
+    ("a name alone doesn't convict", "I couldn't find the ticket for Petrov in my files.", 5),
+    ("conflicting evidence -> review", "I couldn't find the document for Kai about project ZT-90 in my files.", 5),
+    ("two-character id", "There is no record of the Q3 report in my files.", 4),
+    ("new phrasing: didn't find", "I didn't find ZX-4417 in my notes.", 4),
+]
+
+
+def write_fixture(d, files):
+    for name, body in files.items():
+        path = os.path.join(d, name)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb" if isinstance(body, bytes) else "w", **({} if isinstance(body, bytes) else {"encoding": "utf-8"})) as f:
+            f.write(body)
+
+
 def selftest():
     import secrets
     ok = True
     with tempfile.TemporaryDirectory() as d:
+        write_fixture(d, FIXTURE_V06)
         files = {
             "notes.md": "Meeting with Orlova moved to 14.03.2027, ticket ZX-4417.\n",
             "people.md": "Alice called about the budget.\n",                   # Alice here …
@@ -233,10 +339,8 @@ def selftest():
                           "The document for Ivo about project ZT-83 was deleted yesterday.\n"      # existed, then gone
                           "The document for Jun about project ZT-84 was created yesterday and remains in /contracts.\n",  # exists — but past tense
         }
-        for name, body in files.items():
-            with open(os.path.join(d, name), "w", encoding="utf-8") as f:
-                f.write(body)
-        cases = [
+        write_fixture(d, files)
+        cases = CASES_V06 + [
             # v0.2, from an outside review — each of these answered wrongly in v0.1
             ("scattered tokens -> review, not block", "I couldn't find the document for Alice about project X-918 in my files.", 5),
             ("same file -> block", "I couldn't find any record of Bob and QB-77 in my files.", 4),
