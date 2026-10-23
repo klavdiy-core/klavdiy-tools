@@ -62,6 +62,13 @@ A deployment picks a **cost profile**: e.g. `strict` (rows 1-2 BLOCK) for an age
 | Policy | map evidence fields to BLOCK / REVIEW / ALLOW | search or read files; hide uncertainty (every verdict ships with the evidence and the row number that fired); round a REVIEW up to BLOCK |
 | Cost | choose which policy a deployment runs | change facts, labels or the evidence record; make an error invisible by making it cheaper |
 
+**ALLOW is not "true".** It means only "this policy found no ground to stop the claim". A caller that reads ALLOW
+as "the agent was right" returns to the original failure from the other side. The same holds for every verdict: it
+answers "what may be concluded from what was observed", never "what is so".
+
+In short: evidence answers *what was observed*; policy answers *what may be concluded from it*; cost answers *which
+threshold is justified here* — and no layer may forge another's answer.
+
 The aim (in the reviewer's words): not a gate that never errs, but a gate whose errors stay **visible, explainable and
 correctable**.
 
