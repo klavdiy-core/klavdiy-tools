@@ -108,6 +108,21 @@ silent zero. [`zero_search_hook.py`](zero_search_hook.py) is a `PostToolUse` hoo
 default and `-uu`; if only the second finds something, the model is told *next to the tool result* — before any
 sentence is written, and no synonym gets around it. absence-gate stays the second line. Both wrappers: `tests/test_hooks.py`.
 
+**v0.6.1 — three breakers on v0.6, before it was published.** I sent three look-only agents at v0.6 (one hunting false
+`BLOCK`s, one false passes, one the Claude Code seam and Windows). Every finding was reproduced by hand before it counted;
+13 gate cases and 5 wrapper tests are red on the v0.6 commit (`tests/red_on_previous.py 90e67dd CASES_V061`).
+- **False accusations it found:** a *folder* named like the id made a path match a `BLOCK` (only a file's own name can
+  convict now); "2.0" matched inside "1.2.0", "ZT-56" inside "ZT-56.draft". Matching has two tiers now: **strict** (no dot
+  glued to a letter or digit on either side) may `BLOCK`; **near** may only send to `REVIEW`. A year inside a full date is a
+  near match — worth a look, not a verdict.
+- **False passes:** a curly apostrophe ("couldn’t") hid every phrasing; a non-ASCII hyphen ("ZX‑4417", U+2011) split the id;
+  more phrasings ("unable to locate", "absent from", "came up empty", «не могу найти», «нет информации»); "anywhere" now
+  counts as a search; UTF-16 files with a BOM are read as UTF-16.
+- **The seam:** stdin is decoded as UTF-8 whatever the console codec — under cp1251 every Russian claim was mojibake and
+  passed; under cp1252 the hook crashed with exit 1 (fail-open). `PreToolUse` skips code tools (Write, Edit, Bash…): a
+  comment in code is not a claim to a person. The zero-search hook resolves a relative path against the session's cwd.
+- **Known, not fixed:** UTF-16 *without* a BOM is invisible to `rg`, so a claim about its contents can pass.
+
 ## What the gate may block (the policy, written down)
 
 | evidence | verdict |

@@ -1,7 +1,7 @@
 """Run the CURRENT selftest (fixture + cases) with the check() of an EARLIER commit swapped in.
 Every case added since that commit must fail there — a test that was never red proves nothing.
 
-usage: python tests/red_on_previous.py <commit>      (from the absence-gate folder; needs git and rg)
+usage: python tests/red_on_previous.py <commit> [CASES_V06|CASES_V061]   (from the absence-gate folder; needs git and rg)
 """
 import importlib.util, io, os, re, subprocess, sys, tempfile
 from contextlib import redirect_stdout
@@ -27,7 +27,8 @@ def main(commit):
         buf = io.StringIO()
         with redirect_stdout(buf):
             new.selftest()
-    added = {name for name, _, _ in new.CASES_V06}
+    since = sys.argv[2] if len(sys.argv) > 2 else "CASES_V06"          # which case list is «new» relative to <commit>
+    added = {name for name, _, _ in getattr(new, since)}
     red = []
     for line in buf.getvalue().splitlines():
         m = re.match(r"\[(.+?)\] exit (\d) \| expect (\d)", line)

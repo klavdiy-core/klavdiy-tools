@@ -40,7 +40,8 @@ def run(stdin_text):
         pattern = ti.get("pattern")
         if not pattern:
             return ""
-        path = ti.get("path") or event.get("cwd") or os.getcwd()
+        base = event.get("cwd") or os.getcwd()
+        path = os.path.join(base, ti["path"]) if ti.get("path") else base   # v0.6.1: relative to the SESSION's cwd
         flags = ["-i"] if ti.get("-i") else []
         if ti.get("glob"):
             flags += ["--glob", ti["glob"]]
@@ -70,7 +71,7 @@ def run(stdin_text):
 
 
 def main():
-    raw = sys.stdin.read()
+    raw = sys.stdin.buffer.read().decode("utf-8", errors="replace")     # v0.6.1: UTF-8, not the console codec
     if os.environ.get("ZERO_SEARCH_DUMP"):                      # debugging the real hook input; off by default
         open(os.environ["ZERO_SEARCH_DUMP"], "a", encoding="utf-8").write(raw + "\n")
     out = run(raw)

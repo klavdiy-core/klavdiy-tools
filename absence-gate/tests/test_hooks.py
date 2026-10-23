@@ -72,5 +72,26 @@ with tempfile.TemporaryDirectory() as d:
     expect("real response: files mode hit -> silent", real("ZX-4417", {"mode": "files_with_matches", "numFiles": 1,
                                                                        "filenames": ["notes.md"]}), "")
 
+    # v0.6.1 — breaker findings on the wrappers, each reproduced by hand first.
+    import subprocess
+    absence_gate.write_fixture(d, {"ru.md": "Договор с Сидоровой RT-7 лежит в /contracts.\n"})
+    env = {k: v for k, v in os.environ.items() if k not in ("PYTHONUTF8", "PYTHONIOENCODING")}
+    for enc in ("cp1251", "cp1252"):          # a Russian Windows and an English Windows console codec
+        env2 = dict(env, PYTHONIOENCODING=enc, PYTHONUTF8="0")
+        msg = json.dumps({"hook_event_name": "Stop", "last_assistant_message": "Не нашёл договор с Сидоровым RT-7 в памяти."},
+                         ensure_ascii=False).encode("utf-8")
+        p = subprocess.run([sys.executable, os.path.join(HERE, "claude_code_hook.py"), "--root", d], input=msg,
+                           capture_output=True, env=env2)
+        expect(f"stdin is UTF-8 whatever the console codec ({enc})", p.returncode, 2)
+    code_write = json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Write",
+                             "tool_input": {"file_path": "x.py", "content": "# if ticket ZX-4417 is not found in the file, return 404\n"}})
+    expect("PreToolUse: code written by Write is not a claim to the user", claude_code_hook.run(R, code_write)[0], 0)
+    expect("PreToolUse: a shell command is not a claim", claude_code_hook.run(R, json.dumps({"hook_event_name": "PreToolUse",
+           "tool_name": "Bash", "tool_input": {"command": "grep -r ZX-4417 notes || echo not found in file"}}))[0], 0)
+    rel = zero_search_hook.run(json.dumps({"hook_event_name": "PostToolUse", "tool_name": "Grep", "cwd": d,
+                                           "tool_input": {"pattern": "IG-4040", "path": "ignored"},
+                                           "tool_response": {"numFiles": 0, "filenames": [], "content": ""}}))
+    expect("zero search: a relative path is resolved against the event cwd", "ZERO_SEARCH_WAS_BLIND" in rel, True)
+
 print("TEST_HOOKS", "PASS" if ok else "FAIL")
 sys.exit(0 if ok else 1)

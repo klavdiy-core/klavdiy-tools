@@ -29,6 +29,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+CODE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit", "Bash", "PowerShell", "Read", "Grep", "Glob"}
+
 NEXT = ("\nWhat to do now: open the lines above. Then either rewrite the reply so it says what the disk has, "
         "or say in the reply why those lines don't count (e.g. they name a different thing).")
 
@@ -63,6 +65,10 @@ def run(argv, stdin_text):
                     return 0, ""
                 return 2, "GATE_BROKEN: Stop hook input has no last_assistant_message — this Claude Code version can't be checked"
         elif name == "PreToolUse":
+            # v0.6.1 (breakers): a code comment written by Write, or a shell command, is not a claim made to a person.
+            # Wire this hook with a matcher on your send tool; these are skipped even when someone forgets the matcher.
+            if event.get("tool_name") in CODE_TOOLS:
+                return 0, ""
             text = "\n".join(strings(event.get("tool_input", {})))
         else:
             return 2, f"GATE_BROKEN: unsupported hook event {name!r} (use Stop or PreToolUse)"
@@ -79,9 +85,16 @@ def run(argv, stdin_text):
 
 
 def main():
-    code, err = run(sys.argv[1:], sys.stdin.read())
+    # v0.6.1 (breakers): Claude Code sends UTF-8. Reading stdin with the console codec (cp1251 / cp1252 on Windows) turned
+    # every Russian claim into mojibake — a silent pass — or crashed outside run(): traceback, exit 1, fail-open.
+    try:
+        stdin_text = sys.stdin.buffer.read().decode("utf-8")
+        code, err = run(sys.argv[1:], stdin_text)
+    except Exception as e:                                       # noqa: BLE001
+        code, err = 2, f"GATE_BROKEN: {type(e).__name__}: {e}"
     if err:
-        sys.stderr.write(err + "\n")
+        sys.stderr.buffer.write((err + "\n").encode("utf-8"))
+        sys.stderr.flush()
     return code
 
 
