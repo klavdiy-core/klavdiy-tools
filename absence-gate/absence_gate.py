@@ -122,6 +122,11 @@ def content_words(words):
 
 
 NEGATION = re.compile(r"(?i)(?<![\w-])(not|no|never|none|without|isn'?t|aren'?t|wasn'?t|weren'?t|не|нет|ни|без)(?![\w-])")
+# v0.5, the sixth hole (tense and modality): «will be created tomorrow», «may exist», «was deleted yesterday» name the thing
+# but don't say it exists NOW. Kept deliberately narrow — a short list, not a grammar.
+MODALITY = re.compile(r"(?i)(?<![\w-])(will|shall|going to|may|might|could|would|should|maybe|perhaps|possibly|planned|"
+                      r"tomorrow|later|soon|deleted|removed|erased|lost|was|were|будет|будут|может|возможно|наверное|"
+                      r"завтра|потом|позже|удал\w*|стёр\w*|стер\w*|был|была|было|были)(?![\w-])")
 
 
 def evidence(tokens, roots):
@@ -158,11 +163,13 @@ def decide(tokens, together, same_line, per, content=()):
     BLOCK (v0.4) needs ONE LINE that holds every fact token AND every content word of the claim, with no negation in it.
     Anything weaker is REVIEW: a dumb gate errs toward «go look», never toward «forbidden»."""
     strong = [(f, ln) for f, ln in same_line if not ABSENCE.search(ln) and not NEGATION.search(ln)
-              and all(re.search(r"(?i)(?<![\w-])" + re.escape(c), ln) for c in content)]
+              and not MODALITY.search(ln) and all(re.search(r"(?i)(?<![\w-])" + re.escape(c), ln) for c in content)]
     if strong:
-        return "BLOCK", "one line holds every fact token and every content word, with no negation"
+        return "BLOCK", "one line holds every fact token and every content word, plain present, no negation"
     if [ln for _, ln in same_line if ABSENCE.search(ln) or NEGATION.search(ln)]:
         return "REVIEW", "the lines holding all tokens carry a negation — mention is not existence"
+    if [ln for _, ln in same_line if MODALITY.search(ln)]:
+        return "REVIEW", "the lines holding all tokens speak of future, possibility or a past that ended — not 'exists now'"
     if same_line:
         return "REVIEW", f"the tokens are mentioned together, but not the thing claimed absent ({', '.join(content)})"
     if together:
@@ -215,7 +222,10 @@ def selftest():
             "ids.md": "Ticket ZQ-7788 assigned to Petrov.\n",
             "minutes.md": "Dana and project ZT-55 were discussed at the meeting.\n"      # co-mentioned, no document
                           "Evan is not associated with project ZT-66.\n"                 # a negated link
-                          "Document for Fay about project ZT-77 is in /contracts.\n",    # the thing itself
+                          "Document for Fay about project ZT-77 is in /contracts.\n"     # the thing itself
+                          "The document for Gil about project ZT-81 will be created tomorrow.\n"   # future
+                          "The document for Hana about project ZT-82 may exist.\n"                 # possibility
+                          "The document for Ivo about project ZT-83 was deleted yesterday.\n",     # existed, then gone
         }
         for name, body in files.items():
             with open(os.path.join(d, name), "w", encoding="utf-8") as f:
@@ -232,6 +242,10 @@ def selftest():
             ("co-mention, no document -> review", "I couldn't find the document for Dana about project ZT-55 in my files.", 5),
             ("negated link -> review", "I couldn't find the contract for Evan about project ZT-66 in my files.", 5),
             ("the thing itself -> block", "I couldn't find the document for Fay about project ZT-77 in my files.", 4),
+            # v0.5, the sixth hole: tense and modality
+            ("future -> review", "I couldn't find the document for Gil about project ZT-81 in my files.", 5),
+            ("possibility -> review", "I couldn't find the document for Hana about project ZT-82 in my files.", 5),
+            ("deleted -> review", "I couldn't find the document for Ivo about project ZT-83 in my files.", 5),
             # quotes, as a class (so the v0.1 hole can't come back): name / id / person stay; speech goes
             ("quoted id", 'There is no record of "ZQ-7788" in my notes.', 4),
             ("quoted person + id", 'I couldn\'t find "Petrov" with ZQ-7788 in my files.', 4),

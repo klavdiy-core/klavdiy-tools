@@ -55,12 +55,17 @@ and a nested quotation are speech). Per-format records (a JSONL entry, a table r
 tokens on one line, yet proves only that they were mentioned together, not that a *document* exists; "Alice is not
 associated with X-918" even says the opposite. A lexical gate cannot decide existence — so `BLOCK` got narrower again.
 
+**v0.5 — the sixth hole: tense and modality.** "will be created tomorrow", "may exist", "was deleted yesterday" name the
+thing but don't say it exists *now*. A short, deliberately narrow list of markers sends such lines to `REVIEW`. In the
+reviewer's words: not "become smarter" — "define more precisely when you have the right to be sure".
+
 ## What the gate may block (the policy, written down)
 
 | evidence | verdict |
 |---|---|
-| one line holds every fact token **and** every content word of the claim ("document", "ticket"), with no negation in it | `BLOCK` |
+| one line holds every fact token **and** every content word of the claim ("document", "ticket"), in plain present, with no negation | `BLOCK` |
 | one line holds every fact token, but carries a negation or an absence phrase | `REVIEW` |
+| one line holds every fact token, but speaks of the future, a possibility, or a past that ended ("will be created", "may exist", "was deleted") | `REVIEW` (v0.5) |
 | one line holds every fact token, but not the thing the claim says is absent | `REVIEW` |
 | one file holds the tokens on different lines | `REVIEW` — co-stored is not linked |
 | the tokens exist only scattered across files | `REVIEW` |
