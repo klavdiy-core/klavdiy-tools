@@ -108,10 +108,13 @@ def pattern(words):
 
 
 def evidence(tokens, roots):
-    """Files that hold ALL tokens, and per such file the lines that hold any token. Plus per-token file counts.
-    Returns (together: {file: [line, ...]}, per_token: {token: count})."""
+    """Three strengths of evidence, kept apart (v0.3, after the second review: one file is not one record):
+      per_token — how many files hold each token;
+      together  — files that hold all tokens, with the lines that hold any of them;
+      same_line — lines that hold ALL tokens at once: the strongest lexical link a gate can see.
+    Returns (together: {file: [line, ...]}, same_line: [(file, line), ...], per_token: {token: count})."""
     per = {t: search(t, roots)[0] for t in tokens}
-    together = {}
+    together, same_line = {}, []
     for f in search(tokens[0], roots)[1]:
         try:
             text = open(f, encoding="utf-8", errors="replace").read()
@@ -119,7 +122,8 @@ def evidence(tokens, roots):
             continue
         if all(re.search(t, text, re.I) for t in tokens[1:]):
             together[f] = [ln.strip() for ln in text.splitlines() if any(re.search(t, ln, re.I) for t in tokens)][:5]
-    return together, per
+            same_line += [(f, ln.strip()) for ln in text.splitlines() if all(re.search(t, ln, re.I) for t in tokens)]
+    return together, same_line, per
 
 
 def search(query, roots):
@@ -132,12 +136,16 @@ def search(query, roots):
     return len(files), files
 
 
-def decide(tokens, together, per):
-    """Policy over the evidence. Kept apart from gathering, so the rule is readable and replaceable."""
+def decide(tokens, together, same_line, per):
+    """Policy over the evidence. Kept apart from gathering, so the rule is readable and replaceable.
+    BLOCK needs one LINE holding every fact token that is not itself an absence statement ("could not find X")."""
+    positive = [(f, ln) for f, ln in same_line if not ABSENCE.search(ln)]
+    if positive:
+        return "BLOCK", "one line holds every fact token"
+    if same_line:
+        return "REVIEW", "the only lines holding all tokens say 'not found' themselves"
     if together:
-        if all(ABSENCE.search(ln) for lines in together.values() for ln in lines):
-            return "REVIEW", "the only lines holding the tokens say 'not found' themselves"
-        return "BLOCK", "one file holds every fact token"
+        return "REVIEW", "one file holds the tokens, but on different lines — co-stored is not linked"
     if any(per.values()):
         return "REVIEW", "tokens exist, but never together in one file"
     return "PASS", "no token anywhere"
@@ -156,8 +164,8 @@ def check(text, roots):
         if toks is None:
             report.append(f"  not checkable (no date/number/name/id): «{s[:100]}»")
             continue
-        together, per = evidence(toks, roots)
-        verdict, why = decide(toks, together, per)
+        together, same_line, per = evidence(toks, roots)
+        verdict, why = decide(toks, together, same_line, per)
         per_s = " · ".join(f"{t}: {n}" for t, n in per.items())
         lines = "".join(f"\n    {f}\n      " + "\n      ".join(ls) for f, ls in list(together.items())[:5])
         report.append(f"  {verdict}: «{s[:140]}»\n    why: {why}\n    per token (files): {per_s}{lines}")
@@ -181,6 +189,8 @@ def selftest():
             "contracts.md": "Signed: Bob, project QB-77, 02.02.2027.\n",       # both, one file
             "log.md": "I could not find ticket TK-5150 anywhere.\n",           # the token, in an absence line
             "files.md": "Orlova-2027 draft lives in /drafts.\n",
+            "mixed.md": "Carol called about the budget.\nPR-301 belongs to the unrelated migration project.\n",   # one file, two records
+            "ids.md": "Ticket ZQ-7788 assigned to Petrov.\n",
         }
         for name, body in files.items():
             with open(os.path.join(d, name), "w", encoding="utf-8") as f:
@@ -191,6 +201,13 @@ def selftest():
             ("same file -> block", "I couldn't find any record of Bob and QB-77 in my files.", 4),
             ("only an absence line -> review", "Ticket TK-5150 was never saved in my files.", 5),
             ("quoted name is a claim", 'The file "Orlova-2027" does not exist in my folder.', 4),
+            # v0.3, second review: one file is not one record
+            ("same file, different lines -> review", "I couldn't find the document for Carol about project PR-301 in my files.", 5),
+            # quotes, as a class (so the v0.1 hole can't come back): name / id / person stay; speech goes
+            ("quoted id", 'There is no record of "ZQ-7788" in my notes.', 4),
+            ("quoted person + id", 'I couldn\'t find "Petrov" with ZQ-7788 in my files.', 4),
+            ("quoted sentence is speech", 'He wrote "there is no record of ZQ-7788 in my files" yesterday.', 0),
+            ("nested quotation is speech", 'She said «he wrote "no record of ZQ-7788 in my files" again».', 0),
             ("planted red", "I searched my notes for the Orlova meeting on 14.03.2027 and there is no record anywhere.", 4),
             ("synonym still red", "Ticket ZX-4417 was never saved in my files.", 4),
             ("negative control", f"There is no record of {'q' + secrets.token_hex(6)} in my files.", 0),  # generated: can't find itself

@@ -13,7 +13,8 @@ folder its search silently skipped (`.gitignore` hides files from a default `rg`
 4. **gathers evidence** with `rg --no-ignore -i`: per token, how many files hold it; which files hold *all* of them
    together; and the matching lines themselves;
 5. **decides by policy**, separately from the gathering:
-   - `BLOCK` (exit 4) — one file holds every fact token, and its line is not itself an absence statement;
+   - `BLOCK` (exit 4) — one **line** holds every fact token, and that line is not itself an absence statement
+     (v0.3: one file is co-storage, not a link — two unrelated lines in one notes file are `REVIEW`);
    - `REVIEW` (exit 5) — tokens exist but only scattered across files, or the only matching lines say "not found"
      themselves. A lexical gate can't tell "ZX-4417 exists" from "I could not find ZX-4417" — so it shows the line
      and hands the call to whoever opens the file;
@@ -43,6 +44,12 @@ files; a line saying "I could not find ticket ZX-4417" counted as proof the tick
 (`The file "Orlova-2027" doesn't exist`) escaped the check because quotes were stripped as speech. Each is now a
 self-test case, and each was confirmed wrong on v0.1 before the fix. Its main point I agree with: separate evidence from
 decision, and formalise which claims a gate may block and what proof is enough — before making the extraction smarter.
+
+**v0.3 — the second review** (another model, reading the published v0.2) found the fourth hole: "Alice called about
+the budget" and "X-918 belongs to an unrelated project" in one notes file made v0.2 block "no document for Alice about
+X-918". Now the strongest evidence a lexical gate can see is one line holding every token; the same file on different
+lines is `REVIEW`. Quotes became a test class of their own (file name, id, person stay in the claim; a quoted sentence
+and a nested quotation are speech). Per-format records (a JSONL entry, a table row) are the next rung, not this one.
 
 **Limits.** It checks presence of tokens, not meaning. It will not catch "I don't remember how this works" (no
 fact-shaped token), and it can be fooled by a claim that names no carrier. It's a floor, not a judge.
