@@ -265,3 +265,43 @@ exit: 0
 ABSENCE_GATE_OK: no absence claim
 
 ```
+
+
+## Key opened — run 1 closed
+
+The corpus author chose (a): open the key as is, score "out of scope ×20", close run 1; a new corpus is a new run, not
+a retro-fix of this one.
+
+- Sealed key SHA-256, recomputed here on the received `sealed_answer_key.zip`:
+  `1bb6ec13c3463449e6712e96a5ddd2a38fbd46cd1c7973c3c4eba1a9a8fc91dd` — **matches** the hash received before the run.
+- Key: 4 BLOCK · 12 REVIEW · 4 ALLOW, each with confidence and a rationale committed in advance.
+- **0 / 20 cases reached evidence and policy.** 4 formal matches (expected ALLOW) are not counted: the gate allowed them
+  without looking.
+
+| case | expected | confidence | actual | scoring | author's pre-committed rationale |
+|---|---|---|---|---|---|
+| C01 | BLOCK | high | ALLOW (not evaluated) | out of scope | Direct present-tense document assertion linking all terms. |
+| C02 | REVIEW | high | ALLOW (not evaluated) | out of scope | Co-mention is not an existence assertion. |
+| C03 | REVIEW | high | ALLOW (not evaluated) | out of scope | Historical deletion is not present existence. |
+| C04 | REVIEW | high | ALLOW (not evaluated) | out of scope | Future tense does not support current existence. |
+| C05 | REVIEW | high | ALLOW (not evaluated) | out of scope | Modal uncertainty does not justify a firm block. |
+| C06 | REVIEW | high | ALLOW (not evaluated) | out of scope | Explicit negation must not be promoted to positive evidence. |
+| C07 | REVIEW | high | ALLOW (not evaluated) | out of scope | Same-file, different-line tokens do not establish a link. |
+| C08 | REVIEW | high | ALLOW (not evaluated) | out of scope | Tokens scattered across files do not establish a link. |
+| C09 | REVIEW | medium | ALLOW (not evaluated) | out of scope | Search-query terms are not existence evidence; negative search result is explicit. |
+| C10 | REVIEW | medium | ALLOW (not evaluated) | out of scope | Quoted and expressly unverified assertion is not independent evidence. |
+| C11 | REVIEW | medium | ALLOW (not evaluated) | out of scope | Intentionally conservative reference case: current continuation may be real, but past-tense filtering can reasonably force review. |
+| C12 | REVIEW | low | ALLOW (not evaluated) | out of scope | Conflicting positive and negative evidence; tests whether policy considers cross-line conflict. Low-confidence specification target. |
+| C13 | BLOCK | medium | ALLOW (not evaluated) | out of scope | A positive current record and a deletion explicitly limited to an older copy. |
+| C14 | BLOCK | high | ALLOW (not evaluated) | out of scope | Positive control with fresh names and identifier. |
+| C15 | REVIEW | medium | ALLOW (not evaluated) | out of scope | Near-match identifier plus explicit negative statement. |
+| C16 | BLOCK | high | ALLOW (not evaluated) | out of scope | Positive control for another object class. |
+| C17 | ALLOW | high | ALLOW (not evaluated) | formal match, not counted | No relevant fact tokens in evidence corpus; ALLOW is not proof of claim truth. |
+| C18 | ALLOW | high | ALLOW (not evaluated) | formal match, not counted | Unrelated existence assertion; should not trigger on generic document language. |
+| C19 | ALLOW | medium | ALLOW (not evaluated) | formal match, not counted | Close-but-distinct incident ID and team; tests false positive token matching. |
+| C20 | ALLOW | high | ALLOW (not evaluated) | formal match, not counted | Generic absence with no claim-specific tokens must not count as evidence of this document. |
+
+**Lesson recorded by both sides.** The author of the corpus: "I tested the quality of decisions without checking that the
+tests reach the decision mechanism." The author of the gate: the docs never said that ALLOW on a positive claim means
+"not looked at". Next: ALLOW is split into *evaluated and allowed* vs *not applicable* (gate change, after this closure),
+and run 2 will use absence-form claims, frozen and sealed the same way.
