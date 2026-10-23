@@ -182,8 +182,9 @@ def decide(tokens, together, same_line, per, content=()):
 def check(text, roots):
     claims = [s for s in sentences(unquote(text)) if ABSENCE.search(s)]
     if not claims:
-        return 0, "ABSENCE_GATE_OK: no absence claim"
-    report, worst = [], "PASS"
+        # blind run 1: ALLOW on a positive claim meant «not looked at», and read like «checked and fine». Two states now.
+        return 0, "ABSENCE_GATE_NOT_APPLICABLE: no absence claim — this text was not evaluated (ALLOW is not 'true')"
+    report, worst, checked = [], "PASS", 0
     for s in claims:
         if not DISK_ANCHOR.search(s):
             report.append(f"  not checkable (about the world, not the disk): «{s[:100]}»")
@@ -193,6 +194,7 @@ def check(text, roots):
         if toks is None:
             report.append(f"  not checkable (no date/number/name/id): «{s[:100]}»")
             continue
+        checked += 1
         together, same_line, per = evidence(toks, roots)
         verdict, why = decide(toks, together, same_line, per, content_words(kw))
         per_s = " · ".join(f"{t}: {n}" for t, n in per.items())
@@ -204,7 +206,10 @@ def check(text, roots):
         return 4, "ABSENCE_CLAIM_CONTRADICTED — the disk has what the text says is absent. Open the files, rewrite.\n" + "\n".join(report)
     if worst == "REVIEW":
         return 5, "ABSENCE_CLAIM_REVIEW — evidence is partial; a person (or the agent, by opening the files) decides.\n" + "\n".join(report)
-    return 0, f"ABSENCE_GATE_OK: {len(claims)} claim(s), none contradicted\n" + "\n".join(report)
+    if checked == 0:
+        return 0, (f"ABSENCE_GATE_NOT_APPLICABLE: {len(claims)} absence claim(s), none checkable against the disk "
+                   "(about the world, or no fact-shaped token)\n" + "\n".join(report))
+    return 0, f"ABSENCE_GATE_OK: {checked} claim(s) checked against the disk, none contradicted\n" + "\n".join(report)
 
 
 def selftest():
@@ -268,6 +273,15 @@ def selftest():
             got, msg = check(text, [d])
             print(f"[{name}] exit {got} | expect {want}")
             ok &= (got == want)
+        # blind run 1 (closed): «checked and allowed» and «not applicable» must be told apart, both exit 0
+        for name, text, label in [
+            ("positive claim is NOT evaluated", "The document for Fay about project ZT-77 exists.", "ABSENCE_GATE_NOT_APPLICABLE"),
+            ("world claim is NOT evaluated", "The Orlova meeting does not exist yet, she hasn't scheduled it.", "ABSENCE_GATE_NOT_APPLICABLE"),
+            ("checked and held", f"There is no record of {'q' + secrets.token_hex(6).upper()}-7 in my files.", "ABSENCE_GATE_OK"),
+        ]:
+            got, msg = check(text, [d])
+            print(f"[{name}] {msg.split(':')[0]} | expect {label}")
+            ok &= (got == 0 and msg.startswith(label + ":"))
     print("SELFTEST", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 

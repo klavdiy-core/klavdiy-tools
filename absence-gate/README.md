@@ -67,6 +67,14 @@ as a self-test so it stays visible. The next rung is not better negation detecti
 authority**: which claims it may block at all, and on what evidence. Self-test N/N means the lessons written so far are
 not forgotten — not that the gate is reliable.
 
+**v0.5.2 — after blind run 1: ALLOW has two meanings, now told apart.** The first blind corpus held 20 *positive*
+claims ("The document … exists"); the gate evaluates only *absence* claims, so all 20 came back ALLOW without being
+looked at ([results](blind-runs/run-1/RESULTS.md)). Both still exit 0 (so existing hooks don't break), but the first
+line now says which:
+- `ABSENCE_GATE_OK` — at least one claim was checked against the disk and none was contradicted;
+- `ABSENCE_GATE_NOT_APPLICABLE` — nothing was evaluated (no absence claim, or none checkable). It does **not** mean
+  the text is true.
+
 ## What the gate may block (the policy, written down)
 
 | evidence | verdict |
