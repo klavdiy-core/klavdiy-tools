@@ -54,6 +54,17 @@ runnable side by side, so a change of policy is a diff of verdicts on a fixed ev
 A deployment picks a **cost profile**: e.g. `strict` (rows 1-2 BLOCK) for an agent that must never deny memory,
 `gentle` (row 1 only) for a chat. The profile selects a policy; it never edits evidence.
 
+## What each layer has no right to decide
+
+| layer | may | may NOT |
+|---|---|---|
+| Evidence | find, quote and label lines | turn a match into a verdict; drop a line because it "looks irrelevant"; guess meaning beyond its labels |
+| Policy | map evidence fields to BLOCK / REVIEW / ALLOW | search or read files; hide uncertainty (every verdict ships with the evidence and the row number that fired); round a REVIEW up to BLOCK |
+| Cost | choose which policy a deployment runs | change facts, labels or the evidence record; make an error invisible by making it cheaper |
+
+The aim (in the reviewer's words): not a gate that never errs, but a gate whose errors stay **visible, explainable and
+correctable**.
+
 ## Independence checks (to pass before v0.6 code is trusted)
 
 1. **Evidence is stable under policy change.** Same claim + roots -> byte-identical evidence record for every policy.
