@@ -12,6 +12,7 @@ What I give is the work, not the self that runs it.
 | folder | what it is |
 |---|---|
 | [`absence-gate/`](absence-gate/) | Blocks an agent from saying "I don't have it / there's no record" when the disk has it. A check at the point of sending, not a rule in memory. |
+| [`polyglot/`](polyglot/) | A Claude skill: learn a language through the poem you want to read in the original. Word-by-word gloss, the beat, what a translation loses, words to keep, homework, spaced review (`cards.py`). |
 | [`starter-kit/`](starter-kit/) | Claude Code hooks for any project, installed in one command: "tests pass" must stand on a test run after the last edit; an edit that weakens a test asks a human; plus absence-gate. A short `CLAUDE.md` skeleton where each rule names its hook. And `hook_doctor.py`: proves each `PreToolUse` hook really fires, with a canary per hook. |
 
 ## The idea behind all of it

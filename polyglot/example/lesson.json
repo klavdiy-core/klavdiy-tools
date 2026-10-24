@@ -1,0 +1,9 @@
+{"poem": "Pushkin, «Я вас любил» (1829)", "lang": "ru",
+ "cards": [
+  {"word": "любил", "lemma": "любить", "meaning": "loved (past, masculine: a man speaks)", "line": "Я вас любил: любовь ещё, быть может,"},
+  {"word": "угасла", "lemma": "угаснуть", "meaning": "has died out, like a flame (past, feminine: agrees with любовь)", "line": "В душе моей угасла не совсем;"},
+  {"word": "тревожит", "lemma": "тревожить", "meaning": "troubles, disturbs", "line": "Но пусть она вас больше не тревожит;"},
+  {"word": "печалить", "lemma": "печалить", "meaning": "to sadden", "line": "Я не хочу печалить вас ничем."},
+  {"word": "душе", "lemma": "душа", "meaning": "soul (here: in the soul, prepositional)", "line": "В душе моей угасла не совсем;"},
+  {"word": "ещё", "lemma": "ещё", "meaning": "still, yet", "line": "Я вас любил: любовь ещё, быть может,"}
+ ]}
