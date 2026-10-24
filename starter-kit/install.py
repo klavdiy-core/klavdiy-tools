@@ -63,6 +63,20 @@ def install(project, with_absence_gate=True):
     with open(settings, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
+    # canaries, so `python hook_doctor.py` run in the project proves the hooks fire (a Stop hook is out of its reach)
+    shutil.copy2(os.path.join(HERE, "hook_doctor.py"), dest)
+    canaries_path = os.path.join(project, "hook-doctor.canaries.json")
+    canaries = {}
+    if os.path.exists(canaries_path):
+        with open(canaries_path, encoding="utf-8") as f:
+            canaries = json.load(f)
+    canaries.setdefault(_cmd("test_guard.py"), {
+        "tool_name": "Edit",
+        "tool_input": {"file_path": "tests/test_canary.py", "old_string": "assert total == 3\n", "new_string": "pass\n"},
+        "expect": "ask"})
+    with open(canaries_path, "w", encoding="utf-8") as f:
+        json.dump(canaries, f, indent=2)
+
     claude_md = os.path.join(project, "CLAUDE.md")
     wrote_md = False
     if not os.path.exists(claude_md):
@@ -82,6 +96,7 @@ def main(argv):
     if not r["absence_gate"] and "--no-absence-gate" not in argv:
         print("  absence-gate skipped: it needs ripgrep (rg) on PATH")
     print("CLAUDE.md: " + ("written from the template, edit it" if r["claude_md"] else "kept yours as it is"))
+    print("check the hooks fire: cd into the project and run  python .claude/hooks/starter-kit/hook_doctor.py")
     return 0
 
 

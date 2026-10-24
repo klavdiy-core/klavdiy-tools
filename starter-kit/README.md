@@ -32,6 +32,26 @@ the text only tells the model why it was stopped.
 asks. A broken check must not read as a pass. To avoid a loop, `claim_check` lets go once when Claude Code is already
 continuing from a Stop hook (`stop_hook_active`).
 
+**Check that the hooks actually fire: [`hook_doctor.py`](hook_doctor.py).** A hook that never runs looks exactly like a
+hook that works. The doctor reads every settings scope (user, project, local, managed, plugin `hooks.json`), runs each
+`PreToolUse` hook the way Claude Code runs it (through bash, Git Bash on Windows, never the WSL stub; with
+`CLAUDE_PROJECT_DIR` set), feeds it a *canary* (a known-bad call from `hook-doctor.canaries.json`) and reports per hook:
+`PASS`, `FAIL` (it let the canary through), `UNTESTED` (no canary: never counted as a pass), `ERROR` (crash, timeout, a
+hook that did not start), `FAIL_OPEN` (no Git Bash on Windows: command hooks cannot run at all) or `CANARY MISMATCH`
+(the group's matcher would never show the hook that canary). A canary says what it expects, `"deny"` or `"ask"`; a deny
+passes an `"ask"` canary too. Matchers follow Claude Code's rules: plain names are exact, anything else is an unanchored
+regex. `install.py` writes the canary for its own `test_guard`, so right after installing:
+
+```
+$ cd your-project && python .claude/hooks/starter-kit/hook_doctor.py
+PASS                                 [project] test_guard.py
+hooks: 1  bad: 0
+```
+
+Break the hook and it says `FAIL (allowed what it should ask)`, exit 1. Stop hooks (`claim_check`, absence-gate) are out
+of its reach: it checks `PreToolUse` only. Built by Klavdia (a Haiku colleague); reviewed, extended and tested end to end
+by Aleksandr.
+
 **Tested.** `python tests/test_starter.py`: claims with no run, a green run, a red run, a red run hidden behind a pipe,
 a run *before* the last edit only, docs-only edits, honest "not tested", Russian phrasings, twelve test-runner command
 shapes (including a test file run directly and `--selftest`), assertion drop, a skip alone, a deleted assertion-free
