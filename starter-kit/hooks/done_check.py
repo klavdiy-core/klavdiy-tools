@@ -18,7 +18,7 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from claim_check import CLAIM, EDIT_TOOLS, FAILED_OUTPUT, HONEST, SHELL_TOOLS, events, is_code  # noqa: E402
+from claim_check import CLAIM, EDIT_TOOLS, FAILED_OUTPUT, HONEST, SHELL_TOOLS, events, in_project, is_code, project_root  # noqa: E402
 
 DONE = re.compile(r"\b(done|completed?|finished|ready)\b|\bготов\w*|\bсделан\w*|\bзакончил\w*", re.I)
 SECTION = re.compile(r"^#{1,6}\s*definition\s+of\s+done\b.*$|^#{1,6}\s*критери\w*\s+готовности\b.*$", re.I | re.M)
@@ -38,10 +38,11 @@ def _norm(s):
     return " ".join(str(s).split())
 
 
-def verdict(evts, commands):
+def verdict(evts, commands, root=None):
     results = {d["id"]: d for k, d in evts if k == "result"}
     last_edit = max([i for i, (k, d) in enumerate(evts) if k == "use" and d["name"] in EDIT_TOOLS
-                     and is_code(d["input"].get("file_path") or d["input"].get("notebook_path"))], default=-1)
+                     and is_code(d["input"].get("file_path") or d["input"].get("notebook_path"))
+                     and in_project(d["input"].get("file_path") or d["input"].get("notebook_path"), root)], default=-1)
     runs = [d for k, d in evts[last_edit + 1:] if k == "use" and d["name"] in SHELL_TOOLS]
     missing = []
     for cmd in commands:
@@ -79,7 +80,7 @@ def run(argv, stdin_text):
         path = event.get("transcript_path")
         if not path or not os.path.exists(path):
             return 2, "GATE_BROKEN: done_check: no transcript to check the claim against"
-        why = verdict(events(path), commands)
+        why = verdict(events(path), commands, project_root(event))
         return (2, "DONE_UNCHECKED: " + why) if why else (0, "")
     except Exception as e:                                       # noqa: BLE001 — every failure must be loud
         return 2, f"GATE_BROKEN: done_check: {type(e).__name__}: {e}"

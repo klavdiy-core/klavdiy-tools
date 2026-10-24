@@ -18,7 +18,7 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from claim_check import EDIT_TOOLS, FAILED_OUTPUT, SHELL_TOOLS, events, is_code  # noqa: E402
+from claim_check import EDIT_TOOLS, FAILED_OUTPUT, SHELL_TOOLS, events, in_project, is_code, project_root  # noqa: E402
 
 # A blame is either an explicit exoneration of the code, or, in one sentence, something outside the code + a cause
 # + a failure. Measured on a blind corpus written by another model (the first, phrase-list version caught 4 of 25).
@@ -29,7 +29,10 @@ EXONERATE = re.compile(
     r"|\b(can'?t|cannot)\s+(fix|do\s+anything\s+about)\s+(that|it|this)\s+from\s+(our|my|this)\s+side\b"
     r"|\bon\s+(their|your)\s+(end|side|machine|box|system)\b|\b(works|passes)\s+(for\s+me\s+)?locally\b"
     r"|\b(before|without)\s+my\s+code\s+(even\s+)?(runs|running)\b|\bthat'?s\s+not\s+in\s+(our|my|the)\s+code\b"
-    r"|ни\s+при\s+ч[её]м|не\s+в\s+(моём\s+|нашем\s+)?коде|не\s+из-за\s+(моего|моей|моих|кода|правк)"
+    # "ни при чём" only about MY code / change: "шейдер ни при чём, медленная страница" blamed my own other code
+    r"|(мо[йяеи]|наш\w*)\s+(код|правк|изменени|дифф?)\w*(\s+\w+){0,2}\s+ни\s+при\s+ч[её]м"
+    r"|ни\s+при\s+ч[её]м\s+(мо[йяеи]|наш\w*)\s+(код|правк|изменени)\w*"
+    r"|не\s+в\s+(моём\s+|нашем\s+)?коде|не\s+из-за\s+(моего|моей|моих|кода|правк)"
     r"|у\s+меня\s+локально\s+(вс[её]\s+)?(проходит|работает)|на\s+(их|вашей)\s+стороне"
     r"|\b(pass(es)?|works?)\s+on\s+my\s+machine\b|у\s+меня\s+(вс[её]\s+)?(работает|проходит)",
     re.I)
@@ -85,14 +88,14 @@ HONEST = re.compile(
 SELF_CHECK_CMD = re.compile(r"\bgit\s+(diff|show|log\s+-p)\b|(^|\s)diff\s", re.I)
 
 
-def verdict(evts, blamed):
+def verdict(evts, blamed, root=None):
     """None if fine. Main trigger: the last run after the last code edit failed and nothing looked at the change.
     Fallback: the reply blames something outside the code (wording is a weak signal, see README) with no look."""
     edited, last_edit = [], -1
     for i, (k, d) in enumerate(evts):
         if k == "use" and d["name"] in EDIT_TOOLS:
             f = d["input"].get("file_path") or d["input"].get("notebook_path")
-            if is_code(f):
+            if is_code(f) and in_project(f, root):
                 edited.append(f.replace("\\", "/"))
                 last_edit = i
     if last_edit < 0:
@@ -137,7 +140,7 @@ def run(argv, stdin_text):
         if not path or not os.path.exists(path):
             # without a transcript the failure trigger cannot be checked; a blame still must not pass silently
             return (2, "GATE_BROKEN: blame_check: no transcript to check the reply against") if blamed else (0, "")
-        why = verdict(events(path), blamed)
+        why = verdict(events(path), blamed, project_root(event))
         return (2, "BLAME_UNCHECKED: " + why) if why else (0, "")
     except Exception as e:                                       # noqa: BLE001 — every failure must be loud
         return 2, f"GATE_BROKEN: blame_check: {type(e).__name__}: {e}"

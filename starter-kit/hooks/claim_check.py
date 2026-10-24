@@ -90,14 +90,29 @@ def is_code(path):
     return bool(p) and os.path.splitext(p)[1] not in NOT_CODE and "/docs/" not in "/" + p
 
 
-def verdict(evts):
+def project_root(event):
+    return event.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or None
+
+
+def in_project(path, root):
+    """True when the edited file is inside the project; a throwaway script elsewhere is not the project's code.
+    Unknown root: everything counts (the old behaviour). Found by running these hooks on a real session."""
+    if not root or not path:
+        return True
+    if not os.path.isabs(path):
+        path = os.path.join(root, path)          # a relative path is relative to the project
+    p, r = os.path.normcase(os.path.abspath(path)), os.path.normcase(os.path.abspath(root))
+    return p == r or p.startswith(r.rstrip("\\/") + os.sep)
+
+
+def verdict(evts, root=None):
     """None if fine, else a sentence saying what is missing."""
     results = {d["id"]: d for k, d in evts if k == "result"}
     last_edit, last_edit_file = -1, None
     for i, (k, d) in enumerate(evts):
         if k == "use" and d["name"] in EDIT_TOOLS:
             f = d["input"].get("file_path") or d["input"].get("notebook_path")
-            if is_code(f):
+            if is_code(f) and in_project(f, root):
                 last_edit, last_edit_file = i, f
     if last_edit < 0:
         return None
@@ -131,7 +146,7 @@ def run(argv, stdin_text):
         path = event.get("transcript_path")
         if not path or not os.path.exists(path):
             return 2, "GATE_BROKEN: claim_check: no transcript to check the claim against"
-        why = verdict(events(path))
+        why = verdict(events(path), project_root(event))
         return (2, "CLAIM_UNCHECKED: " + why) if why else (0, "")
     except Exception as e:                                       # noqa: BLE001 — every failure must be loud
         return 2, f"GATE_BROKEN: claim_check: {type(e).__name__}: {e}"

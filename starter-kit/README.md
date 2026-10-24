@@ -31,12 +31,17 @@ Running it twice changes nothing.
 
 The first version recognised blame by its wording. On my own example phrases it caught 10 of 10. On a corpus written
 blind by another model it caught 4 of 25; tuned on that corpus, 25 of 25; on a second blind corpus: **7 of 29, with
-7 false alarms in 50 normal replies** ("CI failed because *I* pinned Node 18…" reads like blame to a regex). Wording is
+7 false alarms in 50 normal replies** (6 of 29 after narrowing "ни при чём" to "my code … ни при чём": run on my own session, the broad form held a reply that blamed my *other* code) ("CI failed because *I* pinned Node 18…" reads like blame to a regex). Wording is
 a weak signal. So the main trigger is a fact in the transcript: the last run after your edit failed and you never looked
 at your change. Then any explanation, worded however, waits for a `git diff`. The wording check stays as a fallback
 for blaming without having run anything, and the cost of its false alarm is one `git diff`. These two hooks are
 checked on transcripts (tests below), not yet in a live Claude Code session; they use the same exit-2 mechanism as
 `claim_check`.
+
+**Run on my own session (21 turns), the hooks held two replies.** One was right: I wrote "it works" after editing
+`convert.html` without re-running the tests. One was wrong, and it is fixed: edits to throwaway scripts *outside* the
+project counted as code edits; now only files inside the project (`cwd` of the hook, or `CLAUDE_PROJECT_DIR`) count.
+One limit stays: the wording fallback cannot tell a quoted phrase from a claim.
 
 **About the CLAUDE.md.** It is not mine. My own instruction files stay out of this repository, as the top README says.
 This one is a skeleton: a few lines for your project's facts, and three groups of rules (memory in files, verify

@@ -134,6 +134,32 @@ with tempfile.TemporaryDirectory() as d:
     with tempfile.TemporaryDirectory() as empty:
         expect("no TASK.md: passes", done_check.run([], stop(t, done, cwd=empty))[0], 0)
 
+import claim_check   # noqa: E402
+
+# ---------- found by running the hooks on the author's own session (24.10) ----------
+with tempfile.TemporaryDirectory() as d:
+    proj = os.path.join(d, "proj")
+    os.makedirs(proj)
+    scratch_edit = step("Write", file_path=os.path.join(d, "scratch", "probe.mjs"), content="x")
+    inside_edit = step("Edit", file_path=os.path.join(proj, "src", "app.py"), old_string="a", new_string="b")
+    t = transcript(d, scratch_edit)
+    expect("claim_check: an edit OUTSIDE the project does not need tests",
+           claim_check.run([], stop(t, "It works now.", cwd=proj))[0], 0)
+    t = transcript(d, inside_edit)
+    expect("claim_check: an edit INSIDE the project still needs tests",
+           claim_check.run([], stop(t, "It works now.", cwd=proj))[0], 2)
+    t = transcript(d, scratch_edit + step("Bash", "timed out", True, command="node probe.mjs"))
+    expect("blame_check: a failing run after an edit outside the project: passes",
+           blame_check.run([], stop(t, "The probe timed out.", cwd=proj))[0], 0)
+    t = transcript(d, inside_edit + step("Bash", "timed out", True, command="./run.sh"))
+    expect("blame_check: same inside the project: blocks",
+           blame_check.run([], stop(t, "The probe timed out.", cwd=proj))[0], 2)
+
+expect("'X ни при чём: blames my own other code' is not a blame",
+       bool(blame_check.BLAME.search("Шейдер ни при чём: медленно работала страница конвертера, сам шейдер быстрый.")), False)
+expect("'мой код тут ни при чём' is a blame",
+       bool(blame_check.BLAME.search("Ошибка на стейджинге, мой код тут ни при чём.")), True)
+
 sys.path.insert(0, HERE)
 import install   # noqa: E402
 with tempfile.TemporaryDirectory() as proj:
