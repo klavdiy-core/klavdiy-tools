@@ -16,12 +16,27 @@ python install.py /path/to/your/project
 |---|---|---|
 | [`claim_check.py`](hooks/claim_check.py) | `Stop` | The reply claims success ("fixed", "works", "tests pass", «починил», «тесты проходят»…), the session edited a code file, and **no test command ran after that edit, or the last one failed**. Reply held back (exit 2), the model is told what's missing. Failure is read from the exit code **and** from the output, because `pytest \| tail` exits 0 whatever pytest said. Saying plainly "I haven't run the tests" passes: honesty is the way out, not a skip flag. |
 | [`test_guard.py`](hooks/test_guard.py) | `PreToolUse` on `Edit\|MultiEdit\|Write` | An edit to a test file that drops assertions, adds a skip (`skip`, `xfail`, `xit`, `.only`, `@Disabled`, `t.Skip`…) or deletes a test function **asks the human first**, with the counts before and after. |
+| [`blame_check.py`](hooks/blame_check.py) | `Stop` | **Check yourself before you blame the network.** The session edited code, and after the last edit nothing looked at the change itself (no `git diff` / `git show`, no re-read of an edited file), and either the last run after the edit **failed** (exit code or output) or the reply blames something outside the code. Reply held back: look at your own diff first. "I haven't ruled out my own change" passes. |
+| [`done_check.py`](hooks/done_check.py) | `Stop` | **Definition of done, checked.** If `TASK.md` has a `## Definition of done` section with commands in backticks (`` `pytest -q` passes ``, `` `ruff check .` ``), a reply that says done / fixed / works must stand on each of those commands run **after the last edit**, and none of them failed. Otherwise held back, with the list of what is missing. No `TASK.md`, no check. |
 | [`absence_gate`](../absence-gate/) | `Stop` | "There's no X / not found" when the disk has X: held back (wired only if `rg` is installed). |
 | [`zero_search_hook`](../absence-gate/zero_search_hook.py) | `PostToolUse` on `Grep` | A search that came back empty only because `.gitignore` or a dot-folder hid the file: the model is told next to the result. |
 
 `install.py` copies the hooks into `.claude/hooks/starter-kit/`, **merges** them into `.claude/settings.json` (your
 own hooks and settings stay; a `.bak` is left), and writes [`CLAUDE.md`](CLAUDE.md) only if the project has none.
 Running it twice changes nothing.
+
+**Why `blame_check` keys on the transcript, not on the words.**
+
+![a session: edit sync.py, deploy fails with an SSH timeout, the reply says "network issue on the server side, not the code"; blame_check holds the turn and asks for a look at the diff](examples/blame.png)
+
+The first version recognised blame by its wording. On my own example phrases it caught 10 of 10. On a corpus written
+blind by another model it caught 4 of 25; tuned on that corpus, 25 of 25; on a second blind corpus: **7 of 29, with
+7 false alarms in 50 normal replies** ("CI failed because *I* pinned Node 18…" reads like blame to a regex). Wording is
+a weak signal. So the main trigger is a fact in the transcript: the last run after your edit failed and you never looked
+at your change. Then any explanation, worded however, waits for a `git diff`. The wording check stays as a fallback
+for blaming without having run anything, and the cost of its false alarm is one `git diff`. These two hooks are
+checked on transcripts (tests below), not yet in a live Claude Code session; they use the same exit-2 mechanism as
+`claim_check`.
 
 **About the CLAUDE.md.** It is not mine. My own instruction files stay out of this repository, as the top README says.
 This one is a skeleton: a few lines for your project's facts, and three groups of rules (memory in files, verify
@@ -52,7 +67,12 @@ Break the hook and it says `FAIL (allowed what it should ask)`, exit 1. Stop hoo
 of its reach: it checks `PreToolUse` only. Built by Klavdia (a Haiku colleague); reviewed, extended and tested end to end
 by Aleksandr.
 
-**Tested.** `python tests/test_starter.py`: claims with no run, a green run, a red run, a red run hidden behind a pipe,
+**Tested.** `python tests/test_blame_done.py`: blame_check on a failing run with neutral wording, a failure hidden
+behind a pipe, a look at the diff or a re-read of the edited file (only after the edit, only that file), honest
+"not ruled out", no edit, a green run, blame wordings EN/RU, loop guard, a missing transcript; done_check on a DoD
+command never run, run only before the edit, failed, all green, no claim, honest, no `TASK.md`; install wiring both,
+twice (17 planted breaks, all caught; 6 first survived and showed holes in the tests: all transcripts in one file,
+an "honest" phrase without a blame, an exit code not checked). `python tests/test_starter.py`: claims with no run, a green run, a red run, a red run hidden behind a pipe,
 a run *before* the last edit only, docs-only edits, honest "not tested", Russian phrasings, twelve test-runner command
 shapes (including a test file run directly and `--selftest`), assertion drop, a skip alone, a deleted assertion-free
 test, MultiEdit, Write over an existing file, broken input, and an install into a project that already has settings, run

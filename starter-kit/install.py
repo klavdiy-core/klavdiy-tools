@@ -36,7 +36,7 @@ def install(project, with_absence_gate=True):
     project = os.path.abspath(project)
     dest = os.path.join(project, ".claude", "hooks", "starter-kit")
     os.makedirs(dest, exist_ok=True)
-    for f in ("claim_check.py", "test_guard.py"):
+    for f in ("claim_check.py", "test_guard.py", "blame_check.py", "done_check.py"):
         shutil.copy2(os.path.join(HERE, "hooks", f), dest)
     gate = with_absence_gate and shutil.which("rg") is not None and os.path.isdir(GATE)
     if gate:
@@ -53,6 +53,10 @@ def install(project, with_absence_gate=True):
     added = []
     if _add(hooks, "Stop", None, _cmd("claim_check.py"), "claim_check.py"):
         added.append("Stop: claim_check")
+    if _add(hooks, "Stop", None, _cmd("blame_check.py"), "blame_check.py"):
+        added.append("Stop: blame_check")
+    if _add(hooks, "Stop", None, _cmd("done_check.py"), "done_check.py"):
+        added.append("Stop: done_check")
     if _add(hooks, "PreToolUse", "Edit|MultiEdit|Write", _cmd("test_guard.py"), "test_guard.py"):
         added.append("PreToolUse(Edit|MultiEdit|Write): test_guard")
     if gate:

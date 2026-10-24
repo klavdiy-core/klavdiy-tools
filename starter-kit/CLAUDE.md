@@ -27,6 +27,10 @@ moment of action. Add your project's facts under "This project". Keep the rest s
   *Checked by:* `test_guard` (before Edit / Write) — removing an assertion, adding a skip or deleting a test asks the human.
 - Write the test first and watch it fail for the right reason before you write the fix. A test that was never red
   proves nothing.
+- When something fails after your edit, look at your own change (`git diff`) before you blame the network, SSH, the
+  environment or the tool. *Checked by:* `blame_check` (Stop).
+- "Done" means the Definition of done in `TASK.md` is met: each command listed there ran green after your last edit.
+  *Checked by:* `done_check` (Stop).
 
 ## When unsure
 
