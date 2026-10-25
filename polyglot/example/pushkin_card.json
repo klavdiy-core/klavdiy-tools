@@ -1,0 +1,25 @@
+{
+ "kind": "poem",
+ "tag": "polyglot · one lesson",
+ "source": "Pushkin, «Я вас любил», 1829 · stanza 1",
+ "lines": [
+  [["Я", "I"], ["вас", "you [formal]"], ["любил:", "loved [masc.]"], ["любовь", "love"], ["ещё,", "still"], ["быть может,", "perhaps"]],
+  [["В", "in"], ["душе", "soul"], ["моей", "my"], ["угасла", "died out [fem.]"], ["не совсем;", "not quite"]],
+  [["Но", "but"], ["пусть", "let"], ["она", "it/she"], ["вас", "you"], ["больше не", "no longer"], ["тревожит;", "troubles"]],
+  [["Я", "I"], ["не хочу", "don't want"], ["печалить", "to sadden"], ["вас", "you"], ["ничем.", "with anything"]]
+ ],
+ "translit": ["Ya vas lyubíl: lyubóv' yeshchyó, byt' mózhet,", "V dushé moyéy ugásla ne sovsém;",
+              "No pust' oná vas ból'she ne trevózhit;", "Ya ne khochú pechálit' vas nichém."],
+ "sound": ["я ВАС лю-БИЛ: лю-БОВЬ е-ЩЁ, быть МО-жет",
+           "iambic pentameter: five beats on the even syllables · rhyme ABAB: может / совсем / тревожит / ничем"],
+ "loses": [
+  ["любил", "masculine past: Russian tells you a man is speaking. \"I loved\" does not."],
+  ["вас", "the formal \"you\" (вы), not the intimate ты: he keeps his distance even while confessing."],
+  ["угасла · она", "a flame going out; and love (любовь) is feminine, so \"она\" is both \"it\" and \"she\"."]
+ ],
+ "keep": "любить · угаснуть · тревожить · печалить · душа · ещё",
+ "homework": ["read the stanza aloud 3×, the last time without the gloss",
+              "cover the gloss, write it again for lines 1-2, check",
+              "one line of your own in the same beat, about anything"],
+ "tomorrow": "in «В душе моей угасла не совсем», what is угасла?"
+}

@@ -1,0 +1,22 @@
+{
+ "kind": "skill",
+ "tag": "polyglot · one lesson",
+ "source": "guitar · day 1 · draft example",
+ "thing": "The change from C to A minor, without lifting the whole hand.",
+ "notation": "C  x32010    Am  x02210     only the ring finger moves: 5th string, 3rd fret -> 3rd string, 2nd fret",
+ "feel": ["index and middle fingers stay pressed: they are in the same place in both chords",
+          "only the ring finger travels, two strings over and one fret back",
+          "slow: 60 beats a minute, four strums on each chord, say \"C... A minor\" on beat one"],
+ "breaks": [["everything lifts", "a beginner takes all three fingers off and puts them back; the change is slow and the strings buzz"],
+            ["thumb over the neck", "the wrist bends, a finger lies on the 5th string and mutes it"],
+            ["speed first", "fast and wrong becomes the habit; slow and clean turns into speed by itself in a week"]],
+ "cards": [
+  {"word": "C -> Am", "lemma": "C to Am change", "meaning": "keep index and middle down, move only the ring finger", "line": "C x32010 · Am x02210"},
+  {"word": "x32010", "lemma": "C major shape", "meaning": "C chord: 5th string 3rd fret, 4th 2nd, 2nd 1st; 6th string not played", "line": "C x32010"},
+  {"word": "x02210", "lemma": "A minor shape", "meaning": "A minor: 4th string 2nd fret, 3rd 2nd, 2nd 1st; 6th string not played", "line": "Am x02210"}
+ ],
+ "homework": ["2 minutes: hold C, then Am, four strums each, 60 beats a minute",
+              "5 minutes: 20 clean changes; count them out loud, start again when one buzzes",
+              "8 minutes: play along with any song you know that moves between C and A minor"],
+ "tomorrow": "from C to A minor, which finger is the only one that moves?"
+}
