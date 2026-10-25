@@ -148,47 +148,75 @@ def in_project(path, root):
 # Shell commands that may change code. A heuristic by the shape of the command, not file fingerprints: a script that
 # rewrites files was not a «last code edit», and a success claim after it with no test run went through (external
 # review, 25.10). Running a script (not a test) counts: it may write anything.
-SHELL_EDIT = re.compile(
-    r"\bsed\s+(-\w*\s+)*-i|\bperl\s+(-\w*\s+)*-\w*i|\bpatch\b|\bgit\s+(apply|am|checkout|restore|merge|pull|rebase|"
-    r"cherry-pick|stash\s+(pop|apply)|reset\s+--hard)\b|\btee\b|\b(cp|mv|copy|move|Copy-Item|Move-Item|Set-Content|"
-    r"Add-Content|Out-File)\b", re.I)
+# edits that need no file check: in-place editors, tree-rewriting git commands, formatters
+IN_PLACE = re.compile(
+    r"^(sed\s+(-[\w]+\s+)*(-\w*i\w*|--in-place)\b|perl\s+(-\w+\s+)*-\w*i|patch\b"
+    r"|git\s+(apply|am|merge|pull|rebase|cherry-pick|stash(\s+(pop|apply|push))?\s*$|reset\s+--hard|checkout\s+(?!-[bB]\b)|"
+    r"restore\s+(?!.*--staged))"
+    r"|black\b|isort\b|ruff\s+(format|check\s+.*--fix)|prettier\s+.*--write|eslint\s+.*--fix|gofmt\s+(-\w+\s+)*-w|"
+    r"rustfmt\b|cargo\s+fmt\b|clang-format\s+.*-i\b)", re.I)
+# commands that write a file named in their arguments: an edit only if one of those files is code
+WRITES_ARG = re.compile(r"^(cp|mv|copy|move|tee|rm|del|git\s+rm|Copy-Item|Move-Item|Remove-Item|Set-Content|Add-Content"
+                        r"|Out-File|curl|wget)\b", re.I)
 REDIRECT_TO = re.compile(r">>?\s*['\"]?([^\s'\";&|]+)")
+SCRIPT = re.compile(r"^(bash|sh|zsh|pwsh|powershell)(\.exe)?\s+(-\w+\s+)*\S+\.(sh|ps1|bash)\b", re.I)
+NOT_A_SCRIPT = re.compile(r"^(-V|--version|-h|--help|-m\b|-c\b)|runserver|\bserve\b|http\.server", re.I)
+
+
+def _edit_in(seg):
+    """The code file a segment may change ('' when unknown but likely), or None when it changes no code."""
+    for m in REDIRECT_TO.finditer(seg):
+        t = m.group(1)
+        if is_code(t) and not t.startswith("/dev/") and t.lower() != "nul":
+            return t
+    if IN_PLACE.search(seg) or SCRIPT.search(seg):
+        return ""
+    if WRITES_ARG.search(seg):
+        args = [a.strip("'\"") for a in seg.split()[1:] if not a.startswith("-") and "://" not in a]
+        code = [a for a in args if is_code(a) and "." in os.path.basename(a)]
+        return code[-1] if code else None             # cp logo.png ..., ls | tee list.txt: no code touched
+    words = seg.split()
+    if words and INTERPRETER.match(words[0]) and len(words) > 1 and not NOT_A_SCRIPT.search(" ".join(words[1:])):
+        return ""                                     # a script run: it may write anything
+    return None
 
 
 def shell_edit(command):
-    """The code file a shell command may have changed ('' when unknown but likely), or None when it is read-only."""
-    for seg in re.split(r"&&|\|\||[;\n&]", command or ""):
+    """(code file a shell command may have changed or '' if unknown, tested after it in the same command?), or
+    (None, False) when it changes no code. A pipe's later part is its own segment (`ls | tee x`)."""
+    edit, tested = None, False
+    for seg in re.split(r"&&|\|\||[;\n&|]", command or ""):
         seg = seg.strip()
-        if not seg or TEST_CMD.search(seg):
+        if not seg:
             continue
-        for m in REDIRECT_TO.finditer(seg):
-            if is_code(m.group(1)) and not m.group(1).startswith("/dev/") and m.group(1).lower() != "nul":
-                return m.group(1)
-        if SHELL_EDIT.search(seg):
-            return ""
-        words = seg.split()
-        if words and INTERPRETER.match(words[0]) and len(words) > 1 and not words[1].startswith("-c"):
-            return ""                                    # a script run: it may write anything
-    return None
+        if TEST_CMD.search(seg):
+            tested = edit is not None or tested
+            continue
+        f = _edit_in(seg)
+        if f is not None:
+            edit, tested = f, False                   # an edit after a test: the test no longer covers it
+    return edit, (tested and edit is not None)
 
 
 def verdict(evts, root=None):
     """None if fine, else a sentence saying what is missing."""
     results = {d["id"]: d for k, d in evts if k == "result"}
-    last_edit, last_edit_file = -1, None
+    last_edit, last_edit_file, self_tested = -1, None, False
     for i, (k, d) in enumerate(evts):
         if k == "use" and d["name"] in EDIT_TOOLS:
             f = d["input"].get("file_path") or d["input"].get("notebook_path")
             if is_code(f) and in_project(f, root):
-                last_edit, last_edit_file = i, f
+                last_edit, last_edit_file, self_tested = i, f, False
         elif k == "use" and d["name"] in SHELL_TOOLS:
             cmd = str(d["input"].get("command", ""))
-            f = shell_edit(cmd)
+            f, tested = shell_edit(cmd)
             if f is not None and (not f or in_project(f, root)):
-                last_edit, last_edit_file = i, (f or f"a shell command: `{cmd[:80]}`")
+                last_edit, last_edit_file, self_tested = i, (f or f"a shell command: `{cmd[:80]}`"), tested
     if last_edit < 0:
         return None
-    runs = [d for k, d in evts[last_edit + 1:] if k == "use" and d["name"] in SHELL_TOOLS
+    # `sed -i ... && pytest -q`: the same command edited and then tested; its run counts (Tsaplya)
+    start = last_edit if self_tested else last_edit + 1
+    runs = [d for k, d in evts[start:] if k == "use" and d["name"] in SHELL_TOOLS
             and TEST_CMD.search(str(d["input"].get("command", "")))]
     if not runs:
         return (f"The reply says it works / tests pass, but no test command ran after the last code edit "

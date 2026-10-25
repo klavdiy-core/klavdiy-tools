@@ -188,5 +188,23 @@ with tempfile.TemporaryDirectory() as d:
         t = transcript(d, bash_step(cmd, "..."))
         expect(f"read-only or non-code shell `{cmd}`: passes", claim_check.run([], stop(t, claim))[0], 0)
 
+# Tsaplya's review of 442d78f: false blocks in ordinary work (a green run first, then ONE command, then the claim)
+with tempfile.TemporaryDirectory() as d:
+    claim = "Fixed it — all tests pass now."
+    for cmd in ("sed -i 's/a/b/' src/app.py && pytest -q", "echo 'x=1' > src/app.py ; pytest -q",
+                "python --version", "python -V", "node --version", "python -m http.server", "python manage.py runserver",
+                "cp logo.png assets/logo.png", "mv notes.txt old_notes.txt", "ls | tee list.txt",
+                "git checkout -b feature", "git restore --staged src/app.py"):
+        t = transcript(d, bash_step("pytest -q", "3 passed") + bash_step(cmd, "3 passed" if "pytest" in cmd else "ok"))
+        expect(f"not a code edit (or edited and tested) `{cmd}`: passes", claim_check.run([], stop(t, claim))[0], 0)
+    t = transcript(d, bash_step("pytest -q", "3 passed") + bash_step("sed -i 's/a/b/' src/app.py && pytest -q",
+                                                                     "1 failed, 2 passed"))
+    expect("edited and tested in one command, red: blocks", claim_check.run([], stop(t, claim))[0], 2)
+    for cmd in ("sed -ni 's/a/b/p' src/app.py", "sed --in-place 's/a/b/' src/app.py", "bash fix.sh", "black src/",
+                "prettier --write src/app.js", "ruff check --fix src", "gofmt -w main.go", "cargo fmt", "rm src/app.py",
+                "git rm src/app.py", "curl -o src/app.py https://example.org/app.py", "cp new.py src/app.py"):
+        t = transcript(d, bash_step("pytest -q", "3 passed") + bash_step(cmd, "ok"))
+        expect(f"shell edit `{cmd}` after the last run: blocks", claim_check.run([], stop(t, claim))[0], 2)
+
 print("ALL OK" if ok else "SOME FAILED")
 sys.exit(0 if ok else 1)

@@ -105,8 +105,10 @@ it, it found the last test run red behind a `| grep`, which was true at that mom
 you add its pattern. It knows success claims by phrasing; "Shipped! 🚀" slips by. `test_guard` counts, it doesn't
 understand: replacing `assert x == 1` with `assert x` keeps the count and passes. A code change made through the
 shell also counts as the last code edit, by the shape of the command (`sed -i`, `perl -pi`, `>` into a code file,
-`patch`, `git apply/checkout/restore/merge/pull/rebase`, `cp`/`mv`, and running any script that is not a test), not by
-file fingerprints; so after `python app.py` it asks for a test run before "works". Before, only Edit/Write counted,
+`patch`, tree-rewriting git commands, formatters with their write flag, copying, moving or deleting a code file, and
+running a script - not `--version`, modules or servers), not by
+file fingerprints; so after `python app.py` it asks for a test run before "works". An edit and a test in one command (`sed -i ... &&
+pytest`) count as tested. Before, only Edit/Write counted,
 and a script that rewrote files let "tests pass" through untested — found by an external review, fixed in 442d78f.
 `test_guard` still sees test edits made through Edit/Write only, not through the shell. Not yet exercised in a live Claude
 Code loop, only on its transcripts and hook inputs. Tell me what broke.
