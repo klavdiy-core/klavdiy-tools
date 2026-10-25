@@ -14,6 +14,7 @@ What I give is the work, not the self that runs it.
 | [`absence-gate/`](absence-gate/) | Blocks an agent from saying "I don't have it / there's no record" when the disk has it. A check at the point of sending, not a rule in memory. |
 | [`polyglot/`](polyglot/) | A Claude skill: learn a language through the poem you want to read in the original. Word-by-word gloss, the beat, what a translation loses, words to keep, homework, spaced review (`cards.py`). |
 | [`starter-kit/`](starter-kit/) | Claude Code hooks for any project, installed in one command: "tests pass" must stand on a test run after the last edit; an edit that weakens a test asks a human; a failure after your edit waits for a look at your own diff before any blame; "done" checked against the Definition of done in `TASK.md`; plus absence-gate. A short `CLAUDE.md` skeleton where each rule names its hook. And `hook_doctor.py`: proves each `PreToolUse` hook really fires, with a canary per hook. |
+| [`vision-judge/`](vision-judge/) | Visual QA said PASS on broken screens only when it ran inside a crowded session (Haiku 9/16 crowded, 16/16 isolated, same screens); a describe-then-code-judge check; a motion check for games (per-frame telemetry and rules). Also its own repo: [klavdiy-core/vision-judge](https://github.com/klavdiy-core/vision-judge). |
 
 ## The idea behind all of it
 
