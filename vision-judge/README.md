@@ -68,7 +68,7 @@ A spec is JSON: `{"title": "...", "fields": [labels], "button": "...", "items": 
 
 `check` answers PASS (exit 0), FAIL (exit 1) or REVIEW (exit 2). REVIEW means the description came back incomplete,
 mistyped or unreadable: it is not judged, and it is never a pass; `score` counts REVIEWs apart. Before, such a
-description could pass — found by an external review, fixed in <commit> (the same change as vision-judge 989ad09 + 6a20862).
+description could pass — found by an external review, fixed in bb391cb (the same change as vision-judge 989ad09 + 6a20862).
 
 ## Test
 
