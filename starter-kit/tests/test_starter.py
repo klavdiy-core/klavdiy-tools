@@ -83,6 +83,13 @@ with tempfile.TemporaryDirectory() as d:
     expect("no success claim: passes", claim_check.run([], stop(t, "I changed app.py; next I'll write the test."))[0], 0)
     expect("honest 'not tested': passes", claim_check.run([], stop(t, "Fixed it, but I haven't run the tests yet."))[0], 0)
     expect("Russian claim: blocks", claim_check.run([], stop(t, "Починил, тесты проходят."))[0], 2)
+    expect("'verified by the schema' is not a claim of success",
+           bool(claim_check.CLAIM.search("The config is verified by the schema.")), False)
+    expect("'I verified it' still is", bool(claim_check.CLAIM.search("I verified it works.")), True)
+    expect("'not run by CI' is not an honest 'I did not run'",
+           claim_check.run([], stop(t, "Fixed; the flaky test is not run by CI, all tests pass."))[0], 2)
+    expect("'we have not run the tests' is honest",
+           claim_check.run([], stop(t, "Fixed it, but we have not run the tests yet."))[0], 0)
     expect("already continuing: lets it stop", claim_check.run([], stop(t, claim, active=True))[0], 0)
 
     for cmd in ("go test ./...", "cargo test", "npx vitest run", "node --test", "python -m unittest discover -s tests",

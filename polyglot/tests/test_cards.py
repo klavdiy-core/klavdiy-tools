@@ -81,6 +81,18 @@ class CardsTest(unittest.TestCase):
         with self.assertRaises(KeyError):
             self.deck().grade("nope", True, today=D0)
 
+    def test_the_same_word_in_a_second_poem_keeps_the_card_and_adds_the_poem(self):
+        d = self.deck()
+        d.add_lesson(LESSON, today=D0)
+        d.grade("ru:любить", True, today=D0 + timedelta(days=1))          # progress on the card must survive
+        other = {"poem": "Lermontov, Нет, не тебя", "lang": "ru", "cards": [
+            {"word": "люблю", "lemma": "любить", "meaning": "I love", "line": "Нет, не тебя так пылко я люблю,"}]}
+        self.assertEqual(d.add_lesson(other, today=D0 + timedelta(days=2)), 0)
+        c = cards.Deck(self.path).data["cards"]["ru:любить"]
+        self.assertEqual(c["box"], 2)
+        self.assertEqual([s["poem"] for s in c["seen"]], ["Pushkin, Я вас любил", "Lermontov, Нет, не тебя"])
+        self.assertEqual(cards.Deck(self.path).poems(), {"Pushkin, Я вас любил": 2, "Lermontov, Нет, не тебя": 1})
+
     def test_poems_are_listed_with_their_counts(self):
         d = self.deck()
         d.add_lesson(LESSON, today=D0)
@@ -106,6 +118,10 @@ class CliTest(unittest.TestCase):
             # the progress landed exactly where --file said, nowhere else (a subcommand default once won)
             self.assertTrue(os.path.exists(prog))
             self.assertFalse(os.path.exists(os.path.join(t, "polyglot")))
+            r = run("grade", "ru:nope", "ok")
+            self.assertEqual(r.returncode, 2)
+            self.assertIn("no card ru:nope", r.stderr)
+            self.assertNotIn("Traceback", r.stderr)
 
 
 if __name__ == "__main__":

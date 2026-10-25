@@ -34,6 +34,13 @@ python cards.py due                         # what to review today
 python cards.py grade ru:угаснуть ok
 ```
 
+Progress goes to `polyglot/progress.json` under the folder you run it from; `--file <path>` puts it elsewhere.
+A word met again in another poem keeps its card and its box; the new poem and line are added to it.
+
+```sh
+python cards.py poems                       # each poem with how many of its words you are learning
+```
+
 ## Test
 
 ```sh

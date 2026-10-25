@@ -46,7 +46,7 @@ Files: `cards.py` sits next to this SKILL.md. Progress lives in the learner's pr
 
 ## The next lesson starts with review
 Run `python <this skill's folder>/cards.py --file polyglot/progress.json due`. Ask each due word in context ("in *В душе моей угасла не совсем*, what is *угасла*?"),
-then `python cards.py grade <id> ok|miss`. Check the homework line by line; correct gently and exactly. Only then the
+then `python <this skill's folder>/cards.py --file polyglot/progress.json grade <id> ok|miss`. Check the homework line by line; correct gently and exactly. Only then the
 next stanza.
 
 ## Honesty rules

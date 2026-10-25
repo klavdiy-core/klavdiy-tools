@@ -26,13 +26,17 @@ CLAIM = re.compile(
     r"\b(all\s+)?(the\s+)?tests?\s+(now\s+)?(pass|passes|passed|passing|are\s+(passing|green))\b"
     r"|\b(fixed|solved)\s+(it|now|the\s+(bug|issue|problem|test))\b|\bit\s+(now\s+)?works\b|\bworks\s+now\b"
     r"|\bis\s+(now\s+)?(fixed|working|green|passing)\b|\beverything\s+(works|passes)\b|\ball\s+green\b"
-    r"|\bbuild\s+(is\s+)?green\b|\bshould\s+(now\s+)?work\b|\bverified\b"
+    r"|\bbuild\s+(is\s+)?green\b|\bshould\s+(now\s+)?work\b"
+    r"|\b(i|we)('ve|\s+have)?\s+verified\b|\bverified\s+(it|that|the\s+fix)\b"     # not «verified by the schema»
     r"|тест\w*\s+(теперь\s+)?(проход\w*|зел[её]н\w*)|\bпочинил\w*|\bисправил\w*|\bвс[её]\s+работает|\bработает\b"
     r"|\bвс[её]\s+зел[её]н\w*",
     re.I)
 HONEST = re.compile(
-    r"\b(not|haven'?t|have\s+not|didn'?t|did\s+not|couldn'?t|could\s+not|wasn'?t\s+able\s+to)\s+(yet\s+)?"
-    r"(run|ran|test|tested|verify|verified|check|checked)\b|\buntested\b|\bwithout\s+(running\s+)?(the\s+)?tests\b"
+    # about MY run: «I haven't run», «we did not test» — not «the test is not run by CI»
+    r"\b(i|we)('ve|'d|\s+have|\s+had)?\s+(yet\s+)?(not|never|haven'?t|didn'?t|did\s+not|couldn'?t|could\s+not|"
+    r"wasn'?t\s+able\s+to|weren'?t\s+able\s+to)\s+(yet\s+)?(run|ran|test|tested|verify|verified|check|checked)\b"
+    r"|\b(haven'?t|didn'?t)\s+(yet\s+)?(run|ran|test|tested|verify|verified|check|checked)\b"
+    r"|\buntested\b|\bwithout\s+(running\s+)?(the\s+)?tests\b"
     r"|не\s+(запускал\w*|проверял\w*|прогонял\w*|гонял\w*)|без\s+тест\w*",
     re.I)
 # A test RUNNER at the start of a command (after wrappers like `npx`, `uv run`, `python -m` are taken off).

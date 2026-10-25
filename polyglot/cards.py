@@ -40,11 +40,17 @@ class Deck:
             if not c.get("word") or not c.get("meaning"):
                 raise ValueError("every card needs a word and a meaning")
             cid = f"{lesson.get('lang', '?')}:{c.get('lemma') or c['word']}"
-            if cid in self.data["cards"]:
+            seen = {"poem": lesson.get("poem", ""), "word": c["word"], "line": c.get("line", "")}
+            old = self.data["cards"].get(cid)
+            if old is not None:
+                # the same word met in another poem: the card and its progress stay, the new place is remembered
+                places = old.setdefault("seen", [{"poem": old["poem"], "word": old["word"], "line": old["line"]}])
+                if not any(p["poem"] == seen["poem"] for p in places):
+                    places.append(seen)
                 continue
             self.data["cards"][cid] = {
                 "id": cid, "word": c["word"], "lemma": c.get("lemma", ""), "meaning": c["meaning"],
-                "line": c.get("line", ""), "poem": lesson.get("poem", ""), "box": 1,
+                "line": c.get("line", ""), "poem": lesson.get("poem", ""), "seen": [seen], "box": 1,
                 "due": (today + timedelta(days=1)).isoformat()}
             new += 1
         self._save()
@@ -65,7 +71,8 @@ class Deck:
     def poems(self):
         out = {}
         for c in self.data["cards"].values():
-            out[c["poem"]] = out.get(c["poem"], 0) + 1
+            for poem in dict.fromkeys(p["poem"] for p in c.get("seen") or [{"poem": c["poem"]}]):
+                out[poem] = out.get(poem, 0) + 1
         return out
 
 
@@ -98,6 +105,9 @@ def main(argv=None):
         for c in cs:
             print(f"- [{c['id']}] {c['word']}  ({c['poem']}: \"{c['line']}\")")
     elif a.cmd == "grade":
+        if a.id not in d.data["cards"]:
+            print(f"no card {a.id} (see `cards.py due` for the ids)", file=sys.stderr)
+            return 2
         c = d.grade(a.id, a.result == "ok", a.today)
         print(f"{c['id']}: box {c['box']}, next {c['due']}")
     elif a.cmd == "poems":
