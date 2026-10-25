@@ -174,5 +174,19 @@ with tempfile.TemporaryDirectory() as d:
     install.install(proj, with_absence_gate=False)
     expect("install never overwrites an existing CLAUDE.md", open(os.path.join(proj, "CLAUDE.md")).read(), "my own rules\n")
 
+# an external review (25.10): a code change made through the shell was not a «last code edit», so a success claim
+# after it, with no test run, went through
+with tempfile.TemporaryDirectory() as d:
+    claim = "Fixed it — all tests pass now."
+    for cmd in ("python edit_project_files.py", "sed -i 's/a/b/' src/app.py", "echo 'x = 1' > src/app.py",
+                "git apply fix.patch", "git checkout other-branch -- src/app.py", "perl -pi -e 's/a/b/' app.py"):
+        t = transcript(d, bash_step(cmd, "updated app.py"))
+        expect(f"shell edit `{cmd}`, no test run: blocks", claim_check.run([], stop(t, claim))[0], 2)
+    t = transcript(d, bash_step("python edit_project_files.py", "updated app.py") + bash_step("pytest -q", "3 passed"))
+    expect("shell edit then a green run: passes", claim_check.run([], stop(t, claim))[0], 0)
+    for cmd in ("cat src/app.py", "ls -la", "git status", "git diff", "grep -n foo src/app.py", "echo hi > notes.md"):
+        t = transcript(d, bash_step(cmd, "..."))
+        expect(f"read-only or non-code shell `{cmd}`: passes", claim_check.run([], stop(t, claim))[0], 0)
+
 print("ALL OK" if ok else "SOME FAILED")
 sys.exit(0 if ok else 1)

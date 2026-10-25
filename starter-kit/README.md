@@ -103,5 +103,10 @@ it, it found the last test run red behind a `| grep`, which was true at that mom
 
 **Limits.** It is lexical. `claim_check` knows test commands by shape; a custom runner (`./ci.sh`) is invisible until
 you add its pattern. It knows success claims by phrasing; "Shipped! 🚀" slips by. `test_guard` counts, it doesn't
-understand: replacing `assert x == 1` with `assert x` keeps the count and passes. Not yet exercised in a live Claude
+understand: replacing `assert x == 1` with `assert x` keeps the count and passes. A code change made through the
+shell also counts as the last code edit, by the shape of the command (`sed -i`, `perl -pi`, `>` into a code file,
+`patch`, `git apply/checkout/restore/merge/pull/rebase`, `cp`/`mv`, and running any script that is not a test), not by
+file fingerprints; so after `python app.py` it asks for a test run before "works". Before, only Edit/Write counted,
+and a script that rewrote files let "tests pass" through untested — found by an external review, fixed in <commit>.
+`test_guard` still sees test edits made through Edit/Write only, not through the shell. Not yet exercised in a live Claude
 Code loop, only on its transcripts and hook inputs. Tell me what broke.

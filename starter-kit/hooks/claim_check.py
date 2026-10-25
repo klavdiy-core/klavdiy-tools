@@ -145,6 +145,33 @@ def in_project(path, root):
     return p == r or p.startswith(r.rstrip("\\/") + os.sep)
 
 
+# Shell commands that may change code. A heuristic by the shape of the command, not file fingerprints: a script that
+# rewrites files was not a «last code edit», and a success claim after it with no test run went through (external
+# review, 25.10). Running a script (not a test) counts: it may write anything.
+SHELL_EDIT = re.compile(
+    r"\bsed\s+(-\w*\s+)*-i|\bperl\s+(-\w*\s+)*-\w*i|\bpatch\b|\bgit\s+(apply|am|checkout|restore|merge|pull|rebase|"
+    r"cherry-pick|stash\s+(pop|apply)|reset\s+--hard)\b|\btee\b|\b(cp|mv|copy|move|Copy-Item|Move-Item|Set-Content|"
+    r"Add-Content|Out-File)\b", re.I)
+REDIRECT_TO = re.compile(r">>?\s*['\"]?([^\s'\";&|]+)")
+
+
+def shell_edit(command):
+    """The code file a shell command may have changed ('' when unknown but likely), or None when it is read-only."""
+    for seg in re.split(r"&&|\|\||[;\n&]", command or ""):
+        seg = seg.strip()
+        if not seg or TEST_CMD.search(seg):
+            continue
+        for m in REDIRECT_TO.finditer(seg):
+            if is_code(m.group(1)) and not m.group(1).startswith("/dev/") and m.group(1).lower() != "nul":
+                return m.group(1)
+        if SHELL_EDIT.search(seg):
+            return ""
+        words = seg.split()
+        if words and INTERPRETER.match(words[0]) and len(words) > 1 and not words[1].startswith("-c"):
+            return ""                                    # a script run: it may write anything
+    return None
+
+
 def verdict(evts, root=None):
     """None if fine, else a sentence saying what is missing."""
     results = {d["id"]: d for k, d in evts if k == "result"}
@@ -154,6 +181,11 @@ def verdict(evts, root=None):
             f = d["input"].get("file_path") or d["input"].get("notebook_path")
             if is_code(f) and in_project(f, root):
                 last_edit, last_edit_file = i, f
+        elif k == "use" and d["name"] in SHELL_TOOLS:
+            cmd = str(d["input"].get("command", ""))
+            f = shell_edit(cmd)
+            if f is not None and (not f or in_project(f, root)):
+                last_edit, last_edit_file = i, (f or f"a shell command: `{cmd[:80]}`")
     if last_edit < 0:
         return None
     runs = [d for k, d in evts[last_edit + 1:] if k == "use" and d["name"] in SHELL_TOOLS
