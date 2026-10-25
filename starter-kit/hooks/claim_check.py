@@ -159,6 +159,9 @@ IN_PLACE = re.compile(
 WRITES_ARG = re.compile(r"^(cp|mv|copy|move|tee|rm|del|git\s+rm|Copy-Item|Move-Item|Remove-Item|Set-Content|Add-Content"
                         r"|Out-File|curl|wget)\b", re.I)
 REDIRECT_TO = re.compile(r">>?\s*['\"]?([^\s'\";&|]+)")
+# a formatter told only to look writes nothing: black --check, isort --check-only / --diff (Tsaplya M-443)
+CHECK_ONLY = re.compile(r"^(black|isort|ruff\s+format|prettier|rustfmt|cargo\s+fmt)\b.*\s(--check(-only)?|--diff|-c)\b",
+                        re.I)
 SCRIPT = re.compile(r"^(bash|sh|zsh|pwsh|powershell)(\.exe)?\s+(-\w+\s+)*\S+\.(sh|ps1|bash)\b", re.I)
 NOT_A_SCRIPT = re.compile(r"^(-V|--version|-h|--help|-m\b|-c\b)|runserver|\bserve\b|http\.server", re.I)
 
@@ -169,7 +172,7 @@ def _edit_in(seg):
         t = m.group(1)
         if is_code(t) and not t.startswith("/dev/") and t.lower() != "nul":
             return t
-    if IN_PLACE.search(seg) or SCRIPT.search(seg):
+    if IN_PLACE.search(seg) and not CHECK_ONLY.search(seg) or SCRIPT.search(seg):
         return ""
     if WRITES_ARG.search(seg):
         args = [a.strip("'\"") for a in seg.split()[1:] if not a.startswith("-") and "://" not in a]
