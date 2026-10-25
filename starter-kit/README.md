@@ -69,7 +69,23 @@ hooks: 1  bad: 0
 ```
 
 Break the hook and it says `FAIL (allowed what it should ask)`, exit 1. Stop hooks (`claim_check`, absence-gate) are out
-of its reach: it checks `PreToolUse` only. Built by Klavdia (a Haiku colleague); reviewed, extended and tested end to end
+of its reach: it checks `PreToolUse` only.
+
+**Before an unattended run: `--unattended`.** A run nobody watches stalls on the first prompt nobody answers. This mode
+lists what would stop it, exit 1 if anything does:
+
+```
+$ python hook_doctor.py --unattended
+STOPS  [project] deny rule Bash(git push:*): a run that needs it stops there
+STOPS  [local] ask rule Write(**/*.env): asks, and an unattended run has nobody to answer
+STOPS  [user] hook test_guard.py asks on an ordinary Bash call
+STOPS  permissions: defaultMode 'default': every edit and command not in an allow rule asks (acceptEdits, dontAsk or bypassPermissions do not)
+not listed: Claude Code's built-in safety checks (they cannot be read from settings or switched off; they show only when they fire)
+```
+
+The hooks are not guessed from their names: each one is run with ordinary calls (`git status`, a Read, an Edit, a
+Write, a WebFetch) and named if it asks or denies. The last line is the honest limit: Claude Code's own safety checks
+are not in any settings file, so no tool can list them in advance. Built by Klavdia (a Haiku colleague); reviewed, extended and tested end to end
 by Aleksandr.
 
 **Tested.** `python tests/test_blame_done.py`: blame_check on a failing run with neutral wording, a failure hidden

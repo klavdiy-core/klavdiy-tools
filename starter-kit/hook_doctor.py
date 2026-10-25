@@ -78,12 +78,9 @@ def _kill_tree(proc):
             pass
 
 
-def run_canary(command, canary, timeout=10.0, project_dir=None):
-    """Run one hook with the canary on stdin, through bash, the way Claude Code runs it.
-
-    Deny = exit code 2, or JSON permissionDecision deny on stdout. The hook runs in a fresh temporary folder
-    with CLAUDE_PROJECT_DIR set to project_dir (default: the current folder).
-    """
+def _run_hook(command, payload, timeout, project_dir):
+    """Run one hook with payload on stdin, through bash, the way Claude Code runs it, in a fresh temporary folder with
+    CLAUDE_PROJECT_DIR set. Returns (decision or None, returncode, stderr text), or an ERROR/FAIL_OPEN string."""
     bash = find_bash()
     if bash is None:
         return "FAIL_OPEN (Git Bash not found: Claude Code cannot run command hooks here)"
@@ -96,7 +93,7 @@ def run_canary(command, canary, timeout=10.0, project_dir=None):
             start_new_session=(os.name != "nt"),
         )
         try:
-            out, err = proc.communicate(json.dumps(canary).encode("utf-8"), timeout=timeout)
+            out, err = proc.communicate(json.dumps(payload).encode("utf-8"), timeout=timeout)
         except subprocess.TimeoutExpired:
             _kill_tree(proc)
             try:
@@ -104,20 +101,75 @@ def run_canary(command, canary, timeout=10.0, project_dir=None):
             except subprocess.TimeoutExpired:
                 pass
             return f"ERROR (timeout {timeout:g} s)"
-    text = out.decode("utf-8", "replace")
-    expect = canary.get("expect", "deny")          # "deny", or "ask" (a deny is stricter, so it passes too)
-    decision = _json_decision(text)
-    if decision is None and not NOT_STARTED.search(err.decode("utf-8", "replace")) and proc.returncode == 2:
+    err_text = err.decode("utf-8", "replace")
+    decision = _json_decision(out.decode("utf-8", "replace"))
+    if decision is None and not NOT_STARTED.search(err_text) and proc.returncode == 2:
         decision = "deny"
+    return decision, proc.returncode, err_text
+
+
+def run_canary(command, canary, timeout=10.0, project_dir=None):
+    """Run one hook with the canary on stdin. Deny = exit code 2, or JSON permissionDecision deny on stdout."""
+    got = _run_hook(command, canary, timeout, project_dir)
+    if isinstance(got, str):
+        return got
+    decision, returncode, err_text = got
+    expect = canary.get("expect", "deny")          # "deny", or "ask" (a deny is stricter, so it passes too)
     if decision == "deny" or (decision == "ask" and expect == "ask"):
         return "PASS"
     if decision == "ask":
         return "FAIL (asked where it should deny)"
-    if NOT_STARTED.search(err.decode("utf-8", "replace")):
+    if NOT_STARTED.search(err_text):
         return "ERROR (hook did not start: exit 2 here is not a deny)"
-    if proc.returncode in (0, 2) or decision == "allow":
+    if returncode in (0, 2) or decision == "allow":
         return f"FAIL (allowed what it should {expect})"
-    return f"ERROR (crashed, exit {proc.returncode})"
+    return f"ERROR (crashed, exit {returncode})"
+
+
+# ---------- unattended: what stops a run nobody watches ----------
+
+# ordinary work an autonomous run does; a hook that asks or denies on these stalls it (an ask has nobody to answer)
+PROBES = (("Bash", {"command": "git status"}), ("Read", {"file_path": "{p}/README.md"}),
+          ("Edit", {"file_path": "{p}/src/app.py", "old_string": "a", "new_string": "b"}),
+          ("Write", {"file_path": "{p}/notes.txt", "content": "x"}),
+          ("WebFetch", {"url": "https://example.com", "prompt": "summary"}))
+RUN_READY_MODES = {"acceptEdits", "bypassPermissions", "dontAsk"}
+
+
+def unattended(scopes, timeout=10.0, project_dir=None):
+    """Lines naming each thing that would stop an unattended run: hooks that ask or deny on ordinary tool calls (found
+    by running them), ask and deny rules, and a defaultMode under which anything not allowed asks."""
+    project = Path(project_dir) if project_dir else Path.cwd()
+    found, mode = [], None
+    for label, path in scopes:
+        try:
+            entries = hook_entries(path)
+            data = json.loads(Path(path).read_text(encoding="utf-8")) if entries is not None else {}
+        except (ValueError, OSError) as err:
+            found.append(f"[{label}] {path}: unreadable ({err}); what it holds is unknown")
+            continue
+        perms = (data or {}).get("permissions") or {}
+        mode = perms.get("defaultMode", mode)
+        for rule in perms.get("deny") or []:
+            found.append(f"[{label}] deny rule {rule}: a run that needs it stops there")
+        for rule in perms.get("ask") or []:
+            found.append(f"[{label}] ask rule {rule}: asks, and an unattended run has nobody to answer")
+        for matcher, command in entries or []:
+            for tool, inp in PROBES:
+                if not _matcher_hits(matcher, tool):
+                    continue
+                payload = {"hook_event_name": "PreToolUse", "tool_name": tool,
+                           "tool_input": {k: v.replace("{p}", project.as_posix()) for k, v in inp.items()}}
+                got = _run_hook(command, payload, timeout, project)
+                if isinstance(got, str):
+                    found.append(f"[{label}] hook {_label(command)}: {got} on an ordinary {tool} call")
+                elif got[0] in ("ask", "deny"):
+                    verb = "asks" if got[0] == "ask" else "denies"
+                    found.append(f"[{label}] hook {_label(command)} {verb} on an ordinary {tool} call")
+    if mode not in RUN_READY_MODES:
+        found.append(f"permissions: defaultMode {mode or 'default'!r}: every edit and command not in an allow rule asks "
+                     f"(acceptEdits, dontAsk or bypassPermissions do not)")
+    return found
 
 
 def _matcher_hits(matcher, tool_name):
@@ -213,6 +265,8 @@ def main(argv=None):
     parser.add_argument("--timeout", type=float, default=10.0)
     parser.add_argument("--home", default=None, help="home folder for user and plugin scopes (default: your home)")
     parser.add_argument("--project", default=None, help="project folder (default: current folder)")
+    parser.add_argument("--unattended", action="store_true",
+                        help="before an autonomous run: list the hooks, rules and mode that would stop it")
     args = parser.parse_args(argv)
 
     notes = []
@@ -224,6 +278,16 @@ def main(argv=None):
         scopes, plugins_found = _default_scopes(home, project)
         if not plugins_found:
             notes.append("plugins: NOT CHECKED (no plugin hooks.json found under the plugins folder)")
+
+    if args.unattended:
+        stops = unattended(scopes, args.timeout, project_dir=project)
+        for line in stops:
+            print(f"STOPS  {line}")
+        if not stops:
+            print("unattended: nothing found that would stop the run")
+        print("not listed: Claude Code's built-in safety checks (they cannot be read from settings or switched off; "
+              "they show only when they fire)")
+        return 1 if stops else 0
 
     canary_path = Path(args.canaries) if args.canaries else Path.cwd() / "hook-doctor.canaries.json"
     try:
