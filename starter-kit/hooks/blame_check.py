@@ -50,7 +50,7 @@ OUTSIDE = re.compile(
     r"permissions?|environment(\s+variable)?|env\s+var|shell|python\s+install|node\s+version|clock|machine|setup|"
     r"cache|cdn|registry|mirror|upstream|third[\s-]party|api|library|dependency|package|linter\s+version|"
     r"ci|runner|pipeline|disk|quota|rate\s+limit|certificate|cert|timeout|instance|their\s+(side|end|service))\b"
-    r"|сет[ьи]|прокси|прав\w*\s+на|стейджинг\w*|сервер\w*|окружени\w*|ci\b",
+    r"|сет[ьи]|прокси|\bправ(а|ами)?\s+(на|доступа)\b|стейджинг\w*|сервер\w*|окружени\w*|ci\b",   # not «правке на»
     re.I)
 CAUSE = re.compile(
     r"\b(because|due\s+to|caused\s+by|comes?\s+from|coming\s+from|is\s+why|which\s+is\s+why|so\s+(the|nothing|it)|"

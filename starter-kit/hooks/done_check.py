@@ -31,11 +31,20 @@ def dod_commands(task_text):
     rest = task_text[m.end():]
     nxt = re.search(r"^#{1,6}\s", rest, re.M)
     body = rest[:nxt.start()] if nxt else rest
-    return [c.strip() for c in re.findall(r"`([^`\n]+)`", body) if c.strip()]
+    spans = [c.strip() for c in re.findall(r"`([^`\n]+)`", body) if c.strip()]
+    # a flag (`--force`) or a bare file name (`README.md`) is a word in the text, not a command to run
+    return [c for c in spans if not c.startswith("-") and not re.fullmatch(r"[\w./\\-]+\.[A-Za-z]\w{0,4}", c)]
 
 
 def _norm(s):
     return " ".join(str(s).split())
+
+
+def _ran(cmd, command_line):
+    """The DoD command is one whole command of the line (`cd app && pytest -q`), not a substring
+    (`echo pytest -q`, `pytest -q tests/one_file.py` are not it)."""
+    want = _norm(cmd)
+    return any(_norm(seg) == want for seg in re.split(r"&&|\|\||[;|\n]", command_line or ""))
 
 
 def verdict(evts, commands, root=None):
@@ -43,10 +52,12 @@ def verdict(evts, commands, root=None):
     last_edit = max([i for i, (k, d) in enumerate(evts) if k == "use" and d["name"] in EDIT_TOOLS
                      and is_code(d["input"].get("file_path") or d["input"].get("notebook_path"))
                      and in_project(d["input"].get("file_path") or d["input"].get("notebook_path"), root)], default=-1)
+    if last_edit < 0:
+        return None                          # no code was edited: a "finished reading" reply is not a claim of done
     runs = [d for k, d in evts[last_edit + 1:] if k == "use" and d["name"] in SHELL_TOOLS]
     missing = []
     for cmd in commands:
-        mine = [r for r in runs if _norm(cmd) in _norm(r["input"].get("command", ""))]
+        mine = [r for r in runs if _ran(cmd, r["input"].get("command", ""))]
         if not mine:
             missing.append(f"`{cmd}` (not run after the last edit)")
             continue
@@ -70,8 +81,10 @@ def run(argv, stdin_text):
             return 2, "GATE_BROKEN: done_check: Stop hook input has no last_assistant_message"
         if not (DONE.search(msg) or CLAIM.search(msg)) or HONEST.search(msg):
             return 0, ""
-        task = os.path.join(event.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or ".", "TASK.md")
-        if not os.path.exists(task):
+        # the session's cwd first, then the project root (a cwd in a subfolder must not switch the check off)
+        bases = [b for b in (event.get("cwd"), os.environ.get("CLAUDE_PROJECT_DIR"), ".") if b]
+        task = next((os.path.join(b, "TASK.md") for b in bases if os.path.exists(os.path.join(b, "TASK.md"))), None)
+        if task is None:
             return 0, ""
         with open(task, encoding="utf-8", errors="replace") as f:
             commands = dod_commands(f.read())

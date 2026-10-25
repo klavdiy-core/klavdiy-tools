@@ -36,8 +36,11 @@ import os
 # --- what counts as a claim of absence (EN + RU). Broad on purpose: a false positive costs one search,
 # a false negative costs a lie. A list of phrasings is blind to synonyms it lacks — add the new ones as tests.
 ABSENCE = re.compile(
-    r"(couldn'?t find|could not find|can'?t find|didn'?t find|did not find|haven'?t found|have not found|not found|"
-    r"found nothing|no (record|entry|file|note|mention|trace)s?\b|missing|"
+    # v0.6.2: a word boundary in front (no «casino file»), and «missing» only as a state («is missing», «missing from»),
+    # not as an adjective in a status line («fixed the missing import»)
+    r"\b(couldn'?t find|could not find|can'?t find|didn'?t find|did not find|haven'?t found|have not found|not found|"
+    r"found nothing|no (record|entry|file|note|mention|trace)s?\b|(is|are|was|were|went|go|goes) missing|"
+    r"missing (from|in)\b|"
     r"nothing (recorded|found|saved|anywhere)|there is nothing|there'?s nothing|never (saved|recorded|written)|"
     r"not (saved|recorded|written down|stored)|isn'?t (saved|recorded|stored|written)|doesn'?t exist|does not exist|"
     r"i don'?t have|no such|"
@@ -66,7 +69,10 @@ QUOTED = re.compile(r"«([^«»\n]{0,300})»|“([^“”\n]{0,300})”|\"([^\"\
 def unquote(text):
     def repl(m):
         inner = next(g for g in m.groups() if g is not None)
-        return inner if not re.search(r"\s", inner.strip()) else " "
+        name = inner.strip()
+        # v0.6.2: a quoted FILE name keeps its spaces («"Quarterly plan Z9.docx"») — it is a name, not speech
+        is_file = "," not in name and (re.search(r"\.[A-Za-z][A-Za-z0-9]{0,4}$", name) or re.search(r"[\\/]", name))
+        return inner if not re.search(r"\s", name) or is_file else " "
     return QUOTED.sub(repl, text)
 # v0.6: two-character ids («Q3», «7B») were dropped by the 3+ rule.
 WORD = re.compile(r"[A-Za-zА-Яа-яЁё0-9][A-Za-zА-Яа-яЁё0-9_\-\.]{2,}|(?<![\w-])(?:[A-Za-z]\d|\d[A-Za-z])(?![\w-])")
@@ -374,6 +380,19 @@ CASES_V061 = [
 ]
 
 
+# v0.6.2 — an outside look-only review (25.10.2026), each finding reproduced before it became a case.
+FIXTURE_V062 = {
+    "Quarterly plan Z9.docx": b"PK\x03\x04\x00binary",                               # a file name with spaces
+    "build/app.cpython-311.pyc": b"\x00binary",                                       # a build artefact
+}
+CASES_V062 = [
+    ("a quoted file name with spaces is a claim", 'I couldn\'t find "Quarterly plan Z9.docx" in my files.', 4),
+    ("'missing' in a status line is not an absence claim", "Fixed the missing import in file app.cpython-311.pyc.", 0),
+    ("'no file' inside a word is not 'no file'", "The casino file ZX-4417 opened fine.", 0),
+    ("'is missing' still is", "Ticket ZX-4417 is missing from my notes.", 4),
+]
+
+
 def write_fixture(d, files):
     for name, body in files.items():
         path = os.path.join(d, name)
@@ -388,6 +407,7 @@ def selftest():
     with tempfile.TemporaryDirectory() as d:
         write_fixture(d, FIXTURE_V06)
         write_fixture(d, FIXTURE_V061)
+        write_fixture(d, FIXTURE_V062)
         files = {
             "notes.md": "Meeting with Orlova moved to 14.03.2027, ticket ZX-4417.\n",
             "people.md": "Alice called about the budget.\n",                   # Alice here …
@@ -406,7 +426,7 @@ def selftest():
                           "The document for Jun about project ZT-84 was created yesterday and remains in /contracts.\n",  # exists — but past tense
         }
         write_fixture(d, files)
-        cases = CASES_V06 + CASES_V061 + [
+        cases = CASES_V06 + CASES_V061 + CASES_V062 + [
             # v0.2, from an outside review — each of these answered wrongly in v0.1
             ("scattered tokens -> review, not block", "I couldn't find the document for Alice about project X-918 in my files.", 5),
             ("same file -> block", "I couldn't find any record of Bob and QB-77 in my files.", 4),

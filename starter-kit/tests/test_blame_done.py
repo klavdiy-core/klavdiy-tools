@@ -134,6 +134,34 @@ with tempfile.TemporaryDirectory() as d:
     with tempfile.TemporaryDirectory() as empty:
         expect("no TASK.md: passes", done_check.run([], stop(t, done, cwd=empty))[0], 0)
 
+    expect("'правке на' is my own edit, not access rights",
+           bool(blame_check.BLAME.search("Из-за ошибки в правке на строке 5 тест упал.")), False)
+    expect("'нет прав на запись' is still outside",
+           bool(blame_check.BLAME.search("Деплой падает из-за того, что нет прав на запись в папку.")), True)
+
+    # an outside review (25.10): non-commands in backticks, substring matches, no-edit turns, a subfolder cwd
+    dod2 = os.path.join(d, "dod2")
+    os.makedirs(os.path.join(dod2, "sub"))
+    with open(os.path.join(dod2, "TASK.md"), "w", encoding="utf-8") as f:
+        f.write("## Definition of done\n- [ ] `pytest -q` passes\n- [ ] README mentions `--force` and `README.md`\n")
+    expect("flags and file names in backticks are not commands", done_check.dod_commands(
+        open(os.path.join(dod2, "TASK.md"), encoding="utf-8").read()), ["pytest -q"])
+    t = transcript(d, EDIT + step("Bash", "4 passed", command="cd app && pytest -q"))
+    expect("the DoD command run inside a longer line: passes", done_check.run([], stop(t, done, cwd=dod2))[0], 0)
+    for cmd in ("echo pytest -q", "pytest -q tests/one_file.py"):
+        t = transcript(d, EDIT + step("Bash", "ok", command=cmd))
+        expect(f"not the DoD command: {cmd}", done_check.run([], stop(t, done, cwd=dod2))[0], 2)
+    t = transcript(d, step("Read", "...", file_path="deploy/sync.py"))
+    expect("no code edited this session: nothing to check",
+           done_check.run([], stop(t, "Finished reading the file.", cwd=dod2))[0], 0)
+    os.environ["CLAUDE_PROJECT_DIR"] = dod2
+    try:
+        t = transcript(d, EDIT)
+        expect("TASK.md is found at the project root when cwd is a subfolder",
+               done_check.run([], stop(t, done, cwd=os.path.join(dod2, "sub")))[0], 2)
+    finally:
+        os.environ.pop("CLAUDE_PROJECT_DIR", None)
+
 import claim_check   # noqa: E402
 
 # ---------- found by running the hooks on the author's own session (24.10) ----------

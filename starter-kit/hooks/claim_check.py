@@ -35,13 +35,49 @@ HONEST = re.compile(
     r"(run|ran|test|tested|verify|verified|check|checked)\b|\buntested\b|\bwithout\s+(running\s+)?(the\s+)?tests\b"
     r"|не\s+(запускал\w*|проверял\w*|прогонял\w*|гонял\w*)|без\s+тест\w*",
     re.I)
-TEST_CMD = re.compile(
-    r"\b(pytest|py\.test|unittest|nose2|tox|nox|jest|vitest|mocha|ava|karma|rspec|phpunit|pest|ctest)\b"
-    r"|\bplaywright\s+test\b|\b(npm|yarn|pnpm|bun)\s+(run\s+)?test\b|\bgo\s+test\b|\bcargo\s+(test|nextest)\b"
-    r"|\b(mvn|mvnw|gradle|gradlew)\b.*\btest\b|\bdotnet\s+test\b|\bmix\s+test\b|\bnode\s+--test\b"
-    r"|\bmake\s+(check|test)\b|\bdeno\s+test\b|\bswift\s+test\b"
-    r"|--selftest\b|(^|[\s/\\])(test_\w+|\w+_test|\w+\.(test|spec))\.(py|[cm]?[jt]sx?|rb)\b",   # a test file run directly
+# A test RUNNER at the start of a command (after wrappers like `npx`, `uv run`, `python -m` are taken off).
+# Mentioning a test file or a runner's name elsewhere (`cat test_x.py`, `pip install pytest`) is not running tests.
+RUNNER = re.compile(
+    r"^((pytest|py\.test|unittest|nose2|tox|nox|jest|vitest|mocha|ava|karma|rspec|phpunit|pest|ctest)\b"
+    r"|playwright\s+test\b|(npm|yarn|pnpm|bun)\s+(run\s+)?test\b|go\s+test\b|cargo\s+(test|nextest)\b"
+    r"|(\S*[/\\])?(mvn|mvnw|gradle|gradlew)(\.bat|\.cmd)?\b.*\btest\b|dotnet\s+test\b|mix\s+test\b|--test\b"
+    r"|make\s+(check|test)\b|deno\s+test\b|swift\s+test\b"
+    r"|\S+\s.*--selftest\b|\S+\s+--selftest\b"
+    r"|(\S*[/\\])?(test_\w+|\w+_test|\w+\.(test|spec))\.(py|[cm]?[jt]sx?|rb)\b)",                # a test file run directly
     re.I)
+WRAPPERS = {"sudo", "env", "time", "npx", "bunx", "pnpx", "exec"}
+TWO_WORD = {("uv", "run"), ("poetry", "run"), ("pipenv", "run"), ("pdm", "run"), ("hatch", "run"), ("bundle", "exec"),
+            ("pnpm", "exec"), ("yarn", "exec")}
+INTERPRETER = re.compile(r"^(\S*[/\\])?(python[\d.]*|py|pypy[\d.]*|node|ts-node|ruby)(\.exe)?$", re.I)
+WITH_VALUE = {"-X", "-W", "-r", "--require", "--loader", "--import"}
+
+
+def _command_start(segment):
+    words = segment.split()
+    while words:
+        w = words[0]
+        if re.match(r"^\w+=", w) or w.lower() in WRAPPERS:
+            words = words[1:]
+        elif len(words) > 1 and (w.lower(), words[1].lower()) in TWO_WORD:
+            words = words[2:]
+        elif INTERPRETER.match(w):
+            words = words[1:]
+            while words and words[0].startswith("-") and words[0] not in ("-m", "--test"):
+                words = words[2:] if words[0] in WITH_VALUE else words[1:]
+            if words and words[0] == "-m":
+                words = words[1:]
+        else:
+            break
+    return " ".join(words)
+
+
+class _TestCmd:
+    """TEST_CMD.search(command): True when some segment of the command line starts with a test runner."""
+    def search(self, command):
+        return any(RUNNER.search(_command_start(seg)) for seg in re.split(r"&&|\|\||[;|\n&]", command or ""))
+
+
+TEST_CMD = _TestCmd()
 FAILED_OUTPUT = re.compile(
     r"\bFAILED\b|\b[1-9]\d*\s+(failed|failing|failures?|errors?)\b|^FAIL\b|^not ok \d|✖|\bpanicked\b"
     r"|\bAssertionError\b|^Traceback \(most recent call last\)",

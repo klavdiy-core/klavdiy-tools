@@ -91,6 +91,15 @@ with tempfile.TemporaryDirectory() as d:
         t = transcript(d, edit_step() + bash_step(cmd, "ok"))
         expect(f"recognises a test run: {cmd}", claim_check.run([], stop(t, claim))[0], 0)
 
+    for cmd in ("cat tests/test_foo.py", "git diff test_a.py", "pip install pytest", "grep -n pytest setup.cfg",
+                "echo pytest -q", "code tests/test_starter.py", "git add app.test.js"):
+        t = transcript(d, edit_step() + bash_step(cmd, "ok"))
+        expect(f"mentioning tests is not running them: {cmd}", claim_check.run([], stop(t, claim))[0], 2)
+    for cmd in ("cd app && pytest -q", "CI=1 npm test", "uv run pytest", "python -X utf8 -m pytest tests",
+                "poetry run python tests/test_x.py", "git diff; go test ./..."):
+        t = transcript(d, edit_step() + bash_step(cmd, "ok"))
+        expect(f"recognises a test run in a longer line: {cmd}", claim_check.run([], stop(t, claim))[0], 0)
+
     expect("no transcript: GATE_BROKEN, not a silent pass",
            claim_check.run([], json.dumps({"hook_event_name": "Stop", "last_assistant_message": claim}))[0], 2)
 
@@ -135,11 +144,17 @@ with tempfile.TemporaryDirectory() as d:
     # ---------- install ----------
     proj = os.path.join(d, "proj")
     os.makedirs(os.path.join(proj, ".claude"))
-    with open(os.path.join(proj, ".claude", "settings.json"), "w") as f:
-        json.dump({"model": "x", "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "mine.sh"}]}]}}, f)
+    with open(os.path.join(proj, ".claude", "settings.json"), "w", encoding="utf-8") as f:
+        json.dump({"model": "x", "note": "проект", "hooks": {"Stop": [{"hooks": [{"type": "command",
+                                                                                   "command": "mine.sh"}]}]}}, f,
+                  ensure_ascii=False)
     install.install(proj, with_absence_gate=False)
     install.install(proj, with_absence_gate=False)
-    s = json.load(open(os.path.join(proj, ".claude", "settings.json")))
+    bak = json.load(open(os.path.join(proj, ".claude", "settings.json.bak"), encoding="utf-8"))
+    expect("a second install keeps the .bak of the ORIGINAL settings", "claim_check.py" in json.dumps(bak), False)
+    expect("install keeps non-ASCII text readable",
+           "проект" in open(os.path.join(proj, ".claude", "settings.json"), encoding="utf-8").read(), True)
+    s = json.load(open(os.path.join(proj, ".claude", "settings.json"), encoding="utf-8"))
     cmds = [c["command"] for ev in s["hooks"].values() for h in ev for c in h["hooks"]]
     expect("install keeps the user's own hook", "mine.sh" in cmds, True)
     expect("install is idempotent (claim_check once)", sum("claim_check.py" in c for c in cmds), 1)

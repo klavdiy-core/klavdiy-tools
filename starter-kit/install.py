@@ -48,7 +48,6 @@ def install(project, with_absence_gate=True):
     if os.path.exists(settings):
         with open(settings, encoding="utf-8") as f:
             data = json.load(f)
-        shutil.copy2(settings, settings + ".bak")
     hooks = data.setdefault("hooks", {})
     added = []
     if _add(hooks, "Stop", None, _cmd("claim_check.py"), "claim_check.py"):
@@ -64,8 +63,11 @@ def install(project, with_absence_gate=True):
             added.append("Stop: absence-gate")
         if _add(hooks, "PostToolUse", "Grep", _cmd("zero_search_hook.py"), "zero_search_hook.py"):
             added.append("PostToolUse(Grep): zero-search")
-    with open(settings, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
+    if added:                              # nothing new -> the file and its .bak (the user's original) stay untouched
+        if os.path.exists(settings):
+            shutil.copy2(settings, settings + ".bak")
+        with open(settings, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
 
     # canaries, so `python hook_doctor.py` run in the project proves the hooks fire (a Stop hook is out of its reach)
     shutil.copy2(os.path.join(HERE, "hook_doctor.py"), dest)
