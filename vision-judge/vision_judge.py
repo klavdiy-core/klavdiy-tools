@@ -20,7 +20,7 @@ import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 EYES = ("You are the visual QA step of a coding agent. This screenshot shows the app screen it just built.{spec} "
         "Does the screen look correct and finished? Answer PASS or FAIL on the first line, then one short reason.")
@@ -73,8 +73,32 @@ def _norm(s):
     return re.sub(r"[\s•·*\-]+", " ", str(s or "")).strip().lower()
 
 
+SCHEMA = {"title": str, "labels": list, "button": (str, type(None)), "button_fully_visible": bool,
+          "list_items": list, "problems_seen": list}
+
+
+def schema_problems(inv):
+    """What is missing or of the wrong type in a description. Only a description that is complete can be judged:
+    a missing button_fully_visible, or "false" as a string, used to read as PASS (external review, 25.10)."""
+    if not isinstance(inv, dict):
+        return [f"the description is {type(inv).__name__}, not an object"]
+    out = []
+    for key, want in SCHEMA.items():
+        if key not in inv:
+            out.append(f"{key} is missing")
+        elif not isinstance(inv[key], want) or (want is bool and not isinstance(inv[key], bool)):
+            out.append(f"{key} is {type(inv[key]).__name__} ({inv[key]!r}), not {getattr(want, '__name__', 'str or null')}")
+        elif want is list and not all(isinstance(x, str) for x in inv[key]):
+            out.append(f"{key} holds something other than text")
+    return out
+
+
 def judge(spec, inv):
-    """The judge is code: every difference between the description and the spec is a reason to fail."""
+    """The judge is code: every difference between the description and the spec is a reason to fail. A
+    description that is incomplete or mistyped is not judged at all: REVIEW, never PASS."""
+    bad = schema_problems(inv)
+    if bad:
+        return "REVIEW", bad
     why = []
     if _norm(inv.get("title")) != _norm(spec["title"]):
         why.append(f"title reads {inv.get('title')!r}, spec says {spec['title']!r}")
@@ -100,7 +124,7 @@ def check_one(image, spec, model, asker=ask):
     try:
         inv = parse_inventory(text)
     except ValueError as e:
-        return "FAIL", [f"the description was not readable JSON ({e})"], text
+        return "REVIEW", [f"the description was not readable JSON ({e}): not judged"], text   # cannot judge = REVIEW (Tsaplya)
     v, why = judge(spec, inv)
     return v, why, inv
 
@@ -151,10 +175,11 @@ def score(corpus):
     rows = [json.loads(l) for l in open(os.path.join(corpus, "results.jsonl"), encoding="utf-8")]
     out = {}
     for r in rows:
-        a = out.setdefault((r["arm"], r["model"]), {"caught": 0, "broken": 0, "false_alarm": 0, "intact": 0,
+        a = out.setdefault((r["arm"], r["model"]), {"caught": 0, "broken": 0, "false_alarm": 0, "intact": 0, "review": 0,
                                                    "missed": [], "by_break": {}})
         broken = truth[r["screen"]] != "intact"
         fail = r["verdict"] == "FAIL"
+        a["review"] += r["verdict"] == "REVIEW"           # said apart: a model full of REVIEWs is not just a weak catcher
         if broken:
             a["broken"] += 1
             a["caught"] += fail
@@ -211,7 +236,7 @@ def main(argv=None):
         sc = score(a.corpus)
         for name, v in sc.items():
             print(f"{name:<34} caught {v['caught']}/{v['broken']}  false alarms {v['false_alarm']}/{v['intact']}"
-                  f"  missed {', '.join(v['missed']) or '-'}")
+                  f"  review {v['review']}  missed {', '.join(v['missed']) or '-'}")
         if a.png:
             chart(sc, a.png)
     else:
@@ -220,7 +245,7 @@ def main(argv=None):
         print(v)
         for w in why:
             print(" -", w)
-        return 0 if v == "PASS" else 1
+        return {"PASS": 0, "FAIL": 1}.get(v, 2)        # REVIEW / anything unknown: 2, never a pass
     return 0
 
 
