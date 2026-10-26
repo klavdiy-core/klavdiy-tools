@@ -124,7 +124,7 @@ def check_one(image, spec, model, asker=ask):
     try:
         inv = parse_inventory(text)
     except ValueError as e:
-        return "REVIEW", [f"the description was not readable JSON ({e}): not judged"], text   # cannot judge = REVIEW (Tsaplya)
+        return "REVIEW", [f"the description was not readable JSON ({e}): not judged"], text   # cannot judge = REVIEW (a second review)
     v, why = judge(spec, inv)
     return v, why, inv
 

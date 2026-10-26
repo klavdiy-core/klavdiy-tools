@@ -83,7 +83,7 @@ class ScanTests(unittest.TestCase):
 
 
 class ReviewTests(unittest.TestCase):
-    """Regressions from REVIEW_aleksandr.md (24.10.2026): each one was red before the fix."""
+    """Regressions from a code review (24.10.2026): each one was red before the fix."""
 
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()

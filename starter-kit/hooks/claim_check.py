@@ -159,7 +159,7 @@ IN_PLACE = re.compile(
 WRITES_ARG = re.compile(r"^(cp|mv|copy|move|tee|rm|del|git\s+rm|Copy-Item|Move-Item|Remove-Item|Set-Content|Add-Content"
                         r"|Out-File|curl|wget)\b", re.I)
 REDIRECT_TO = re.compile(r">>?\s*['\"]?([^\s'\";&|]+)")
-# a formatter told only to look writes nothing: black --check, isort --check-only / --diff (Tsaplya M-443)
+# a formatter told only to look writes nothing: black --check, isort --check-only / --diff (a second review)
 CHECK_ONLY = re.compile(r"^(black|isort|ruff\s+format|prettier|rustfmt|cargo\s+fmt)\b.*\s(--check(-only)?|--diff|-c)\b",
                         re.I)
 SCRIPT = re.compile(r"^(bash|sh|zsh|pwsh|powershell)(\.exe)?\s+(-\w+\s+)*\S+\.(sh|ps1|bash)\b", re.I)
@@ -217,7 +217,7 @@ def verdict(evts, root=None):
                 last_edit, last_edit_file, self_tested = i, (f or f"a shell command: `{cmd[:80]}`"), tested
     if last_edit < 0:
         return None
-    # `sed -i ... && pytest -q`: the same command edited and then tested; its run counts (Tsaplya)
+    # `sed -i ... && pytest -q`: the same command edited and then tested; its run counts (a second review)
     start = last_edit if self_tested else last_edit + 1
     runs = [d for k, d in evts[start:] if k == "use" and d["name"] in SHELL_TOOLS
             and TEST_CMD.search(str(d["input"].get("command", "")))]

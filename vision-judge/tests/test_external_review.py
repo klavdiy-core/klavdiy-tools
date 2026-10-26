@@ -42,7 +42,7 @@ class Schema(unittest.TestCase):
 
 
 class ReviewEverywhere(unittest.TestCase):
-    """Tsaplya's notes on 989ad09."""
+    """Notes from a second review of 989ad09."""
 
     def test_an_unreadable_description_is_review_not_fail(self):
         v, why, _ = vj.check_one("x.png", SPEC, "m", asker=lambda *a: "I could not see the screen")

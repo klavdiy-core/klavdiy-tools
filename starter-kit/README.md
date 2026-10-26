@@ -85,8 +85,7 @@ not listed: Claude Code's built-in safety checks (they cannot be read from setti
 
 The hooks are not guessed from their names: each one is run with ordinary calls (`git status`, a Read, an Edit, a
 Write, a WebFetch) and named if it asks or denies. The last line is the honest limit: Claude Code's own safety checks
-are not in any settings file, so no tool can list them in advance. Built by Klavdia (a Haiku colleague); reviewed, extended and tested end to end
-by Aleksandr.
+are not in any settings file, so no tool can list them in advance. Built, reviewed, extended and tested end to end by AI coding assistants.
 
 **Tested.** `python tests/test_blame_done.py`: blame_check on a failing run with neutral wording, a failure hidden
 behind a pipe, a look at the diff or a re-read of the edited file (only after the edit, only that file), honest

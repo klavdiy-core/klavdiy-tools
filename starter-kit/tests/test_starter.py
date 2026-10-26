@@ -188,7 +188,7 @@ with tempfile.TemporaryDirectory() as d:
         t = transcript(d, bash_step(cmd, "..."))
         expect(f"read-only or non-code shell `{cmd}`: passes", claim_check.run([], stop(t, claim))[0], 0)
 
-# Tsaplya's review of 442d78f: false blocks in ordinary work (a green run first, then ONE command, then the claim)
+# a second review of 442d78f: false blocks in ordinary work (a green run first, then ONE command, then the claim)
 with tempfile.TemporaryDirectory() as d:
     claim = "Fixed it — all tests pass now."
     for cmd in ("sed -i 's/a/b/' src/app.py && pytest -q", "echo 'x=1' > src/app.py ; pytest -q",
@@ -206,7 +206,7 @@ with tempfile.TemporaryDirectory() as d:
         t = transcript(d, bash_step("pytest -q", "3 passed") + bash_step(cmd, "ok"))
         expect(f"shell edit `{cmd}` after the last run: blocks", claim_check.run([], stop(t, claim))[0], 2)
 
-# Tsaplya M-443: a formatter that only checks writes nothing
+# a second review: a formatter that only checks writes nothing
 with tempfile.TemporaryDirectory() as d:
     claim = "Fixed it — all tests pass now."
     for cmd in ("black --check src/", "black --diff src/", "isort --check-only src/", "isort --diff src/",
