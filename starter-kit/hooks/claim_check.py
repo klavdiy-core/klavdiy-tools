@@ -184,7 +184,11 @@ def _edit_in(seg):
     return None
 
 
-NESTED_SHELL = re.compile(r"""\b(?:ba|z|da)?sh\s+-c\s+(['"])(.*?)\1""")
+# flags may come before -c, or join it (bash -lc, bash -e -c, bash --login -c)
+NESTED_SHELL = re.compile(r"""\b(?:ba|z|da)?sh(?:\s+-[-\w]+)*?\s+-\w*c\s+(['"])(.*?)\1""")
+# what runs the same program: sudo [-flags], env [-flags] [X=1 ...], X=1, a full path to it
+PREFIX = re.compile(r"^(?:sudo(?:\s+-\S+)*\s+|env(?:\s+-\S+)*\s+|\w+=\S*\s+)+")
+FULL_PATH = re.compile(r"^(?:/[\w.+-]+)+/(?=\S)")
 
 
 def shell_edit(command):
@@ -198,8 +202,9 @@ def shell_edit(command):
         if inner == command:
             break
         command = inner
-    for seg in re.split(r"&&|\|\||[;\n&|]", command):
-        seg = seg.strip()
+    # $(...) and `...` run their contents as their own commands
+    for seg in re.split(r"&&|\|\||\$\(|[;\n&|()`]", command):
+        seg = FULL_PATH.sub("", PREFIX.sub("", seg.strip()))
         if not seg:
             continue
         if TEST_CMD.search(seg):

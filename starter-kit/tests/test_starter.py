@@ -218,7 +218,14 @@ with tempfile.TemporaryDirectory() as d:
 with tempfile.TemporaryDirectory() as d:
     claim = "Fixed it — all tests pass now."
     for cmd in ("sh -c 'sed -i s/a/b/ src/app.py'", 'bash -c "sed -i s/a/b/ src/app.py"',
-                "zsh -c 'black src/'"):
+                "zsh -c 'black src/'",
+                # second review of 627b05f: flags before -c, substitutions, prefixes
+                "bash -lc 'sed -i s/a/b/ src/app.py'", "bash -ec 'sed -i s/a/b/ src/app.py'",
+                "bash -e -c 'sed -i s/a/b/ src/app.py'", "bash --login -c 'sed -i s/a/b/ src/app.py'",
+                "echo $(sed -i s/a/b/ src/app.py)", "echo `sed -i s/a/b/ src/app.py`",
+                "sudo sed -i s/a/b/ src/app.py", "env LC_ALL=C sed -i s/a/b/ src/app.py",
+                "LC_ALL=C sed -i s/a/b/ src/app.py", "/bin/sed -i s/a/b/ src/app.py",
+                "sudo -E /usr/bin/sed -i s/a/b/ src/app.py"):
         t = transcript(d, bash_step("pytest -q", "3 passed") + bash_step(cmd, "ok"))
         expect(f"nested shell edit `{cmd}` after the last run: blocks", claim_check.run([], stop(t, claim))[0], 2)
     for cmd in ("sh -c 'ls src'", "bash -c \"sed -i s/a/b/ src/app.py && pytest -q\""):
