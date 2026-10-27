@@ -228,7 +228,11 @@ with tempfile.TemporaryDirectory() as d:
                 "sudo -E /usr/bin/sed -i s/a/b/ src/app.py",
                 # second review of 02ccb6d: parentheses in names are not subshells; "$(...)" runs inside "..."
                 'cp "tpl (1).py" src/app.py', 'mv "src/old (1).py" src/new.py', "cp tpl(1).py src/app.py",
-                'echo "$(sed -i s/a/b/ src/app.py)"', "(sed -i s/a/b/ src/app.py)"):
+                'echo "$(sed -i s/a/b/ src/app.py)"', "(sed -i s/a/b/ src/app.py)",
+                # a review of cc138a6: keywords and wrappers before the command
+                "for f in src/*.py; do sed -i s/a/b/ $f; done", "if true; then sed -i s/a/b/ src/app.py; fi",
+                "time sed -i s/a/b/ src/app.py", "nohup sed -i s/a/b/ src/app.py", "! sed -i s/a/b/ src/app.py",
+                "{ sed -i s/a/b/ src/app.py; }"):
         t = transcript(d, bash_step("pytest -q", "3 passed") + bash_step(cmd, "ok"))
         expect(f"nested shell edit `{cmd}` after the last run: blocks", claim_check.run([], stop(t, claim))[0], 2)
     for cmd in ("sh -c 'ls src'", "bash -c \"sed -i s/a/b/ src/app.py && pytest -q\"",

@@ -256,7 +256,8 @@ def _edit_in(seg):
 # flags may come before -c, or join it (bash -lc, bash -e -c, bash --login -c)
 NESTED_SHELL = re.compile(r"""\b(?:ba|z|da)?sh(?:\s+-[-\w]+)*?\s+-\w*c\s+(['"])(.*?)\1""")
 # what runs the same program: sudo [-flags], env [-flags] [X=1 ...], X=1, a full path to it
-PREFIX = re.compile(r"^(?:sudo(?:\s+-\S+)*\s+|env(?:\s+-\S+)*\s+|\w+=\S*\s+)+")
+# and shell keywords or wrappers before it: for ...; do sed -i ...; done, if ...; then ...; fi, time, nohup, !
+PREFIX = re.compile(r"^(?:sudo(?:\s+-\S+)*\s+|env(?:\s+-\S+)*\s+|\w+=\S*\s+|(?:do|then|else|elif|time|nohup|[{!])\s+)+")
 FULL_PATH = re.compile(r"^(?:/[\w.+-]+)+/(?=\S)")
 
 
