@@ -75,10 +75,79 @@ def _command_start(segment):
     return " ".join(words)
 
 
+def segments(command):
+    """The simple commands a shell line runs, quote-aware: split on ; & | newline and ( ) outside quotes;
+    $(...) and `...` run their contents (inside "..." too, not inside '...'); a ( inside a word, as in
+    `tpl(1).py` or "old (1).py", is part of the name."""
+    out, cur, q, stack, lit = [], [], None, [], 0
+    command = command or ""
+    # a nested shell runs its string as a command: `sh -c 'sed -i ... app.py'` is the same edit
+    while True:
+        inner = NESTED_SHELL.sub(r"\2", command)
+        if inner == command:
+            break
+        command = inner
+
+    def flush():
+        s = "".join(cur).strip()
+        if s:
+            out.append(s)
+        cur.clear()
+
+    i = 0
+    while i < len(command):
+        c = command[i]
+        if q == "'":
+            cur.append(c)
+            q = None if c == "'" else q
+        elif c == "\\" and i + 1 < len(command):
+            cur.append(command[i:i + 2])
+            i += 1
+        elif c == "$" and command[i + 1:i + 2] == "(":
+            flush()
+            stack.append(("$(", q, lit))
+            q, lit = None, 0
+            i += 1
+        elif c == "`":
+            flush()
+            if stack and stack[-1][0] == "`":
+                q, lit = stack.pop()[1:]
+            else:
+                stack.append(("`", q, lit))
+                q, lit = None, 0
+        elif q == '"':
+            cur.append(c)
+            q = None if c == '"' else q
+        elif c in "'\"":
+            cur.append(c)
+            q = c
+        elif c in ";&|\n":
+            flush()
+        elif c == "(":
+            if "".join(cur).strip():
+                cur.append(c)                        # part of a word: tpl(1).py
+                lit += 1
+            else:
+                flush()                              # a subshell
+        elif c == ")":
+            if lit:
+                cur.append(c)
+                lit -= 1
+            else:
+                flush()
+                if stack and stack[-1][0] == "$(":
+                    q, lit = stack.pop()[1:]
+        else:
+            cur.append(c)
+        i += 1
+    flush()
+    return out
+
+
 class _TestCmd:
     """TEST_CMD.search(command): True when some segment of the command line starts with a test runner."""
     def search(self, command):
-        return any(RUNNER.search(_command_start(seg)) for seg in re.split(r"&&|\|\||[;|\n&]", command or ""))
+        return any(RUNNER.search(_command_start(seg)) for seg in segments(command))
 
 
 TEST_CMD = _TestCmd()
@@ -195,16 +264,8 @@ def shell_edit(command):
     """(code file a shell command may have changed or '' if unknown, tested after it in the same command?), or
     (None, False) when it changes no code. A pipe's later part is its own segment (`ls | tee x`)."""
     edit, tested = None, False
-    command = command or ""
-    # a nested shell runs its string as a command: `sh -c 'sed -i ... app.py'` is the same edit
-    while True:
-        inner = NESTED_SHELL.sub(r"\2", command)
-        if inner == command:
-            break
-        command = inner
-    # $(...) and `...` run their contents as their own commands
-    for seg in re.split(r"&&|\|\||\$\(|[;\n&|()`]", command):
-        seg = FULL_PATH.sub("", PREFIX.sub("", seg.strip()))
+    for seg in segments(command):
+        seg = FULL_PATH.sub("", PREFIX.sub("", seg))
         if not seg:
             continue
         if TEST_CMD.search(seg):

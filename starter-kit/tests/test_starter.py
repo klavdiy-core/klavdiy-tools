@@ -225,10 +225,16 @@ with tempfile.TemporaryDirectory() as d:
                 "echo $(sed -i s/a/b/ src/app.py)", "echo `sed -i s/a/b/ src/app.py`",
                 "sudo sed -i s/a/b/ src/app.py", "env LC_ALL=C sed -i s/a/b/ src/app.py",
                 "LC_ALL=C sed -i s/a/b/ src/app.py", "/bin/sed -i s/a/b/ src/app.py",
-                "sudo -E /usr/bin/sed -i s/a/b/ src/app.py"):
+                "sudo -E /usr/bin/sed -i s/a/b/ src/app.py",
+                # second review of 02ccb6d: parentheses in names are not subshells; "$(...)" runs inside "..."
+                'cp "tpl (1).py" src/app.py', 'mv "src/old (1).py" src/new.py', "cp tpl(1).py src/app.py",
+                'echo "$(sed -i s/a/b/ src/app.py)"', "(sed -i s/a/b/ src/app.py)"):
         t = transcript(d, bash_step("pytest -q", "3 passed") + bash_step(cmd, "ok"))
         expect(f"nested shell edit `{cmd}` after the last run: blocks", claim_check.run([], stop(t, claim))[0], 2)
-    for cmd in ("sh -c 'ls src'", "bash -c \"sed -i s/a/b/ src/app.py && pytest -q\""):
+    for cmd in ("sh -c 'ls src'", "bash -c \"sed -i s/a/b/ src/app.py && pytest -q\"",
+                'git commit -m "fix (sed -i usage)"', 'echo "see (python app.py) docs"',
+                'git commit -m "wip; sed -i s/a/b/ src/app.py next"', "echo 'a | sed -i s/a/b/ src/app.py'",
+                "echo 'not run: $(sed -i s/a/b/ src/app.py)'", "sed -i s/a/b/ src/app.py && (pytest -q)"):
         t = transcript(d, bash_step("pytest -q", "3 passed") + bash_step(cmd, "3 passed"))
         expect(f"nested shell, no edit or edited and tested `{cmd}`: passes", claim_check.run([], stop(t, claim))[0], 0)
 
