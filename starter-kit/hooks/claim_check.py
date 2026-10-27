@@ -184,11 +184,21 @@ def _edit_in(seg):
     return None
 
 
+NESTED_SHELL = re.compile(r"""\b(?:ba|z|da)?sh\s+-c\s+(['"])(.*?)\1""")
+
+
 def shell_edit(command):
     """(code file a shell command may have changed or '' if unknown, tested after it in the same command?), or
     (None, False) when it changes no code. A pipe's later part is its own segment (`ls | tee x`)."""
     edit, tested = None, False
-    for seg in re.split(r"&&|\|\||[;\n&|]", command or ""):
+    command = command or ""
+    # a nested shell runs its string as a command: `sh -c 'sed -i ... app.py'` is the same edit
+    while True:
+        inner = NESTED_SHELL.sub(r"\2", command)
+        if inner == command:
+            break
+        command = inner
+    for seg in re.split(r"&&|\|\||[;\n&|]", command):
         seg = seg.strip()
         if not seg:
             continue

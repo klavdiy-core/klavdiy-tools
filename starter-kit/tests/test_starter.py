@@ -214,5 +214,16 @@ with tempfile.TemporaryDirectory() as d:
         t = transcript(d, bash_step("pytest -q", "3 passed") + bash_step(cmd, "ok"))
         expect(f"a check-only formatter `{cmd}`: passes", claim_check.run([], stop(t, claim))[0], 0)
 
+# a nested shell runs the same edit: `sh -c 'sed -i ...'` is an edit, `bash -c "pytest -q"` is a run
+with tempfile.TemporaryDirectory() as d:
+    claim = "Fixed it — all tests pass now."
+    for cmd in ("sh -c 'sed -i s/a/b/ src/app.py'", 'bash -c "sed -i s/a/b/ src/app.py"',
+                "zsh -c 'black src/'"):
+        t = transcript(d, bash_step("pytest -q", "3 passed") + bash_step(cmd, "ok"))
+        expect(f"nested shell edit `{cmd}` after the last run: blocks", claim_check.run([], stop(t, claim))[0], 2)
+    for cmd in ("sh -c 'ls src'", "bash -c \"sed -i s/a/b/ src/app.py && pytest -q\""):
+        t = transcript(d, bash_step("pytest -q", "3 passed") + bash_step(cmd, "3 passed"))
+        expect(f"nested shell, no edit or edited and tested `{cmd}`: passes", claim_check.run([], stop(t, claim))[0], 0)
+
 print("ALL OK" if ok else "SOME FAILED")
 sys.exit(0 if ok else 1)
